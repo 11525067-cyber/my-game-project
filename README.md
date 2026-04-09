@@ -18,7 +18,7 @@ you're playing
 and o,u,p for the second player to control the second character and they'll fight against each other
 -Mambo apocalypse mode is an infinite mode wave clearing that save your progress after clearing a wave and in there you fight enemies spawned into 
 the stage and you can play with 2 players
--Character info: all info about the skill set and damage of characters and enemy
+-Character info: all info about the skill set and damage of characters 
 -Custom simulation: you can allow as many different characters to fight against each other as you want
 
 *You may press Esc in all game mode to pause the game or go back to home screen.
