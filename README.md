@@ -6,8 +6,8 @@ and a custom mode to simulatte as many bals of different characters you want to 
 
 *How to run project in vscode:
 Open Vscode(or any IDE) and run this in terminal in bash:
-pip install pygame(for anyone who have not yet installed pygame)
-git clone https://github.com/11525067-cyber/my-game-project.git
+pip install pygame(for anyone who have not yet installed pygame) then
+git clone https://github.com/11525067-cyber/my-game-project.git then
 cd my-game-project
 now run game.py in vscode after turning terminal language from bash back to normal
 
