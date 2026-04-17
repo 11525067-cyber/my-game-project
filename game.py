@@ -6,6 +6,7 @@ import sys
 import random
 import cv2
 import numpy as np
+from collections import deque
 from itertools import combinations
 
 
@@ -37,6 +38,7 @@ class Circle:
         self.normal_image = image
         self.ultimate_image = None
         self.controller = "ai"
+        self.angle = 0.0
         self.impulse_vx = 0.0
         self.impulse_vy = 0.0
         self.impulse_wall_bounces_remaining = 0
@@ -793,6 +795,68 @@ def draw_media_toggle_button(surface, rect, is_paused):
         pygame.draw.rect(button_surface, icon_color, (left_x, top_y, bar_width, int(bar_height)), border_radius=3)
         pygame.draw.rect(button_surface, icon_color, (left_x + bar_width + gap, top_y, bar_width, int(bar_height)), border_radius=3)
 
+    surface.blit(button_surface, rect.topleft)
+
+
+def draw_vertical_volume_slider(surface, rect, volume_fraction):
+    volume_fraction = max(0.0, min(1.0, volume_fraction))
+    slider_surface = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+    pygame.draw.rect(slider_surface, (22, 34, 58, 230), slider_surface.get_rect(), border_radius=14)
+    pygame.draw.rect(slider_surface, (210, 236, 255, 220), slider_surface.get_rect(), 2, border_radius=14)
+
+    track_width = max(8, rect.width // 3)
+    track_rect = pygame.Rect(0, 0, track_width, rect.height - 22)
+    track_rect.center = (rect.width // 2, rect.height // 2)
+    pygame.draw.rect(slider_surface, (44, 68, 102, 255), track_rect, border_radius=track_width // 2)
+
+    fill_height = max(0, int(round(track_rect.height * volume_fraction)))
+    if fill_height > 0:
+        fill_rect = pygame.Rect(track_rect.x, track_rect.bottom - fill_height, track_rect.width, fill_height)
+        pygame.draw.rect(slider_surface, (105, 205, 255, 255), fill_rect, border_radius=track_width // 2)
+
+    knob_center_y = track_rect.bottom - int(round(track_rect.height * volume_fraction))
+    knob_center_y = max(track_rect.top, min(track_rect.bottom, knob_center_y))
+    knob_radius = max(8, min(14, rect.width // 3))
+    pygame.draw.circle(slider_surface, (245, 251, 255), (track_rect.centerx, knob_center_y), knob_radius)
+    pygame.draw.circle(slider_surface, (18, 40, 76), (track_rect.centerx, knob_center_y), knob_radius, 2)
+
+    percent_text = f"{int(round(volume_fraction * 100))}%"
+    text_surface = get_font(max(16, int(rect.width * 0.5))).render(percent_text, True, (235, 248, 255))
+    text_rect = text_surface.get_rect(center=(rect.width // 2, rect.height - 10))
+    slider_surface.blit(text_surface, text_rect)
+    surface.blit(slider_surface, rect.topleft)
+
+
+def draw_music_skip_button(surface, rect):
+    button_surface = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+    top_color = (120, 180, 255)
+    bottom_color = (40, 110, 220)
+    for y in range(rect.height):
+        t = y / max(1, rect.height - 1)
+        color = (
+            int(top_color[0] + (bottom_color[0] - top_color[0]) * t),
+            int(top_color[1] + (bottom_color[1] - top_color[1]) * t),
+            int(top_color[2] + (bottom_color[2] - top_color[2]) * t),
+            255,
+        )
+        pygame.draw.line(button_surface, color, (0, y), (rect.width, y))
+    pygame.draw.rect(button_surface, (18, 40, 76), button_surface.get_rect(), 2, border_radius=10)
+    pygame.draw.rect(button_surface, (235, 248, 255), button_surface.get_rect().inflate(-6, -6), 1, border_radius=8)
+    icon_color = (8, 16, 28)
+    center_x = rect.width // 2
+    center_y = rect.height // 2
+    bar_width = max(6, int(rect.width * 0.12))
+    bar_height = max(12, int(rect.height * 0.4))
+    pygame.draw.rect(button_surface, icon_color, (center_x - bar_width - 2, center_y - bar_height // 2, bar_width, bar_height), border_radius=2)
+    triangle_left = center_x + 2
+    triangle_width = max(8, int(rect.width * 0.2))
+    triangle_height = max(14, int(rect.height * 0.45))
+    points = [
+        (triangle_left, center_y - triangle_height // 2),
+        (triangle_left, center_y + triangle_height // 2),
+        (triangle_left + triangle_width, center_y),
+    ]
+    pygame.draw.polygon(button_surface, icon_color, [(int(x), int(y)) for x, y in points])
     surface.blit(button_surface, rect.topleft)
 
 
@@ -1811,6 +1875,10 @@ def simulate():
     gojo_blue_original = make_tinted_glow_image(gojo_red_original, (135, 206, 250))
     gojo_purple_original = load_image("hollow purple.png")
     arona_and_plana_original = load_image("arona and plana.png")
+    arona_classroom_dark = load_image("arona classroom dark.png")
+
+    blue_sky = load_image("blue sky.png")
+    mika_sky = load_image("mika sky.png")
     do_mixi_win_loser_original = load_image("meo cam kho ga.png")
     mika_ultimate_xd_original = load_image("mika ultimate XD.png")
     mambo_original = load_image("mambo face.png")
@@ -1829,12 +1897,14 @@ def simulate():
     epstein_normal_attack_original = load_image("judaism normal attack.png")
     epstein_normal_attack_blue_original = make_tinted_glow_image(epstein_normal_attack_original, (90, 210, 255))
     epstein_classroom_original = load_image("epstein classroom.png")
+    thukuna_dance_video = load_video_background("thukuna dance.mp4", 208, 144)
     elon_musk_original = load_image("elon musk.png")
     dogecoin_original = load_image("doge coin elon musk.png")
     falcon_9_original = load_image("falcon 9.png")
     cybertruck_original = load_image("tesla cybertruck.png")
     space_x_rocket_original = load_image("space x rocket.png")
     mika_image = scale_to_fit(mika_original, radius * 2, radius * 2)
+    ame_chan_original = load_image("ame chan.png")
     vu_image = scale_to_fit(vu_original, int(radius * 2 * 1.4), radius * 2)
     vu_ultimate_image = scale_to_fit(vu_ultimate_original, int(radius * 2 * 1.4 * 1.2), int(radius * 2 * 1.2))
     gojo_image = scale_to_fit(gojo_original, radius * 2, radius * 2)
@@ -1913,11 +1983,13 @@ def simulate():
     do_mixi_win_sound = load_optional_sound("an do mixi")
     gojo_win_sound = load_optional_sound("yowai mo")
     gojo_infinite_void_sound = amplify_sound(load_optional_sound("infinite void"), 2.0)
-    gojo_lapse_blue_sound = amplify_sound(load_optional_sound("gojo lapse blue audio"), 2.0)
-    gojo_reversal_red_sound = amplify_sound(load_optional_sound("gojo reversal red audio"), 2.0)
-    gojo_hollow_purple_sound = amplify_sound(load_optional_sound("hollow purple audio"), 2.0)
+    gojo_lapse_blue_sound = load_optional_sound("gojo lapse blue audio")
+    gojo_reversal_red_sound = load_optional_sound("gojo reversal red audio")
+    gojo_hollow_purple_sound = load_optional_sound("hollow purple audio")
     epstein_summon_sound = amplify_sound(load_optional_sound("with this treasure i summon"), 2.0)
     epstein_jumpscare_sound = amplify_sound(load_optional_sound("epstein jumpscare"), 1.5)
+    thukuna_gugugaga_sound = amplify_sound(load_optional_sound("thukuna gugugaga"), 2.0)
+    no_response_sound = load_optional_sound("no response")
     trump_jumpscare_original = load_image("trump jumpscare.png")
     hachimi_sound = load_optional_sound("hachimi")
     hachimi_on_your_lawn_sound = load_optional_sound("hachimi on your lawn")
@@ -1925,7 +1997,7 @@ def simulate():
     mambo_high_onlife_sound = load_optional_sound("mambo high onlife") or load_optional_sound("mambo high on life")
     golden_wind_mambo_sound = load_optional_sound("golden wind mambo")
     mambo_mario_sound = load_optional_sound("mambo mario audio")
-    faker_call_sound = load_optional_sound("faker call audio")
+    faker_call_sound = None
     elon_skill_voice_sounds = [
         snd
         for snd in (
@@ -1938,27 +2010,36 @@ def simulate():
     epstein_win_sound = load_optional_sound("charlie kirk funk")
 
     # Background music
-    maid_arisu_theme_file = "Maid Arisu theme.mp3"
+  
     home_music_files = [
-        "Hifumi Daisuki.mp3",
-        "Jumping thoughts NEoYaM.mp3",
-        "Koukatsu.mp3",
-        "Uminaoshi.mp3",
-        "New Darling.mp3"
+        "taste of cockroach maretu.mp3",
+        "koukatsu maretu.mp3",
+        "New darling maretu.mp3",
+        "Ángel maretu remix.mp3",
+        "Encore Maretu remix.mp3",
+        "uminaoshi maretu.mp3"
     ]
-    home_music_track_files = {maid_arisu_theme_file, *home_music_files}
-    home_music_volume = 0.25
-    home_music_track_volumes = {
-        "Jumping thoughts NEoYaM.mp3": min(1.0, home_music_volume * 4.0),
+    home_music_track_files = {*home_music_files}
+    home_music_base_volume = 0.25
+    home_music_track_base_volumes = {
+        "New darling maretu.mp3": min(1.0, home_music_base_volume * 2.0),
+        "Ángel maretu remix.mp3": min(1.0, home_music_base_volume * 2.0),
+        "taste of cockroach maretu.mp3": min(1.0, home_music_base_volume * 2.0),
+        "koukatsu maretu.mp3": min(1.0, home_music_base_volume * 2.0),
+        "Encore Maretu remix.mp3": min(1.0, home_music_base_volume * 2.0),
+        "uminaoshi maretu.mp3": min(1.0, home_music_base_volume * 2.0),
     }
-    initial_home_music = ["Maid Arisu theme.mp3", "Hifumi Daisuki.mp3", "Jumping thoughts NEoYaM.mp3"]
+    initial_home_music = ["taste of cockroach maretu.mp3", "koukatsu maretu.mp3", "New darling maretu.mp3", "Ángel maretu remix.mp3", "Encore Maretu remix.mp3", "uminaoshi maretu.mp3"]
     def get_current_home_music_files():
         if has_finished_battle:
             return home_music_files
         else:
             return initial_home_music
     current_home_music_index = 0
+    home_music_volume_fraction = 0.67
+    current_home_music_file = None
     home_music_paused = False
+    battle_music_mode = False
 
     if gojo_infinite_void_sound:
         gojo_infinite_void_sound.set_volume(1.0)
@@ -1970,6 +2051,8 @@ def simulate():
         gojo_hollow_purple_sound.set_volume(1.0)
     if faker_call_sound:
         faker_call_sound.set_volume(1.0)
+    if thukuna_gugugaga_sound:
+        thukuna_gugugaga_sound.set_volume(1.0)
     for snd in elon_skill_voice_sounds:
         snd.set_volume(1.0)
     if elon_win_sound:
@@ -1979,6 +2062,7 @@ def simulate():
     voice_extra_channels = [pygame.mixer.Channel(idx) for idx in (3, 4)] if pygame.mixer.get_init() else []
     voice_channels = [ch for ch in ([voice_primary_channel, voice_secondary_channel] + voice_extra_channels) if ch is not None]
     music_channel = pygame.mixer.Channel(2) if pygame.mixer.get_init() else None
+    escape_ambient_channel = pygame.mixer.Channel(5) if pygame.mixer.get_init() else None
     zombie_music_mode = None
     
     def play_music_sound(sound):
@@ -2000,6 +2084,7 @@ def simulate():
                 music_channel.play(zomboss_track)
         elif mode == "boss":
             if mambo_mario_sound:
+                music_channel.stop()  # Ensure any previous music stops
                 music_channel.play(mambo_mario_sound)
         elif mode == "golden":
             if golden_wind_mambo_sound:
@@ -2008,32 +2093,56 @@ def simulate():
             opener = hachimi_on_your_lawn_sound or hachimi_sound
             if opener:
                 music_channel.play(opener)
-                if hachimi_high_on_life_sound and opener is not hachimi_high_on_life_sound:
-                    music_channel.queue(hachimi_high_on_life_sound)
             elif hachimi_high_on_life_sound:
                 music_channel.play(hachimi_high_on_life_sound)
 
-    def stop_all_audio():
+    def stop_all_audio(stop_music=True):
         nonlocal zombie_music_mode
         zombie_music_mode = None
         try:
             pygame.mixer.stop()
         except pygame.error:
             pass
+        if stop_music:
+            try:
+                pygame.mixer.music.stop()
+            except pygame.error:
+                pass
+
+    def get_home_music_volume(file):
+        if file in home_music_track_files:
+            base_volume = home_music_track_base_volumes.get(file, home_music_base_volume)
+        else:
+            base_volume = 1.0
+        battle_reduction = 0.5 if battle_music_mode else 1.0
+        return max(0.0, min(1.0, base_volume * home_music_volume_fraction * battle_reduction))
+
+    def set_home_music_volume(volume_fraction):
+        nonlocal home_music_volume_fraction
+        home_music_volume_fraction = max(0.0, min(1.0, volume_fraction))
+        if not pygame.mixer.get_init():
+            return
+        try:
+            pygame.mixer.music.set_volume(get_home_music_volume(current_home_music_file))
+        except pygame.error:
+            pass
+
+    def set_home_music_volume_from_slider_y(mouse_y):
+        relative_y = (mouse_y - music_slider_rect.top) / max(1, music_slider_rect.height)
+        set_home_music_volume(1.0 - relative_y)
 
     def play_background_music(file):
-        nonlocal home_music_paused
+        nonlocal home_music_paused, current_home_music_file
         try:
             pygame.mixer.music.load(os.path.join(_game_dir, file))
-            if file in home_music_track_files:
-                volume = home_music_track_volumes.get(file, home_music_volume)
-            else:
-                volume = 1.0
-            pygame.mixer.music.set_endevent(pygame.USEREVENT + 1 if file in home_music_track_files else pygame.NOEVENT)
+            volume = get_home_music_volume(file)
+            loops = -1 if file == "Jumping thoughts NEoYaM.mp3" else 0
+            pygame.mixer.music.set_endevent(pygame.USEREVENT + 1 if file in home_music_track_files and loops == 0 else pygame.NOEVENT)
             pygame.mixer.music.set_volume(volume)
-            pygame.mixer.music.play()
+            pygame.mixer.music.play(loops=loops)
+            current_home_music_file = file
             home_music_paused = False
-        except pygame.error:
+        except Exception:
             pass
 
     def play_next_home_music():
@@ -2052,12 +2161,13 @@ def simulate():
 
     def ensure_home_music_running():
         nonlocal home_music_paused
-        if not pygame.mixer.get_init():
+        if not pygame.mixer.get_init() or in_escape_mode:
             return
         try:
             if home_music_paused:
                 pygame.mixer.music.unpause()
                 pygame.mixer.music.set_endevent(pygame.USEREVENT + 1)
+                pygame.mixer.music.set_volume(get_home_music_volume(current_home_music_file))
                 home_music_paused = False
             elif not pygame.mixer.music.get_busy():
                 start_home_music()
@@ -2072,6 +2182,7 @@ def simulate():
             if home_music_paused:
                 pygame.mixer.music.unpause()
                 pygame.mixer.music.set_endevent(pygame.USEREVENT + 1)
+                pygame.mixer.music.set_volume(get_home_music_volume(current_home_music_file))
                 home_music_paused = False
             elif pygame.mixer.music.get_busy():
                 pygame.mixer.music.pause()
@@ -2124,7 +2235,7 @@ def simulate():
             channel = next((ch for ch in preferred_order if ch is not None and ch is not voice_primary_channel), voice_primary_channel)
         channel.play(sound)
         rebalance_voice_channels()
-    play_background_music(maid_arisu_theme_file)
+    play_background_music("taste of cockroach maretu.mp3")
     menu_state = "mode"
     game_mode = "sim"
     bot_difficulty = "medium"
@@ -2132,6 +2243,7 @@ def simulate():
     epstein_jumpscare_timer = 0.0
     trump_jumpscare_active = False
     trump_jumpscare_timer = 0.0
+    music_slider_dragging = False
     hp_multiplier = 1.0
     custom_count_input = ""
     zombie_count_input = ""
@@ -2164,6 +2276,895 @@ def simulate():
         if is_golden_wave(wave_number):
             return "golden"
         return "normal"
+    escape_menu_state = "epstein_escape"
+    in_escape_mode = False
+    escape_raw_maze_layout = [
+        "#################",
+        "#E...#...#......#",
+        "#....#.....#.#..#",
+        "#..#....#..#....#",
+        "#..#..#....#..#.#",
+        "#....#..#....#..#",
+        "#.##....##....#.#",
+        "#...#....M.#....#",
+        "#.#....#..#....##",
+        "#..#..#....#..#.#",
+        "#....#..#....#..#",
+        "#..#....#..#...S#",
+        "#################",
+    ]
+    escape_cell_size = 72.0
+
+    def build_escape_maze(layout_rows):
+        grid_width = max((len(row_text) for row_text in layout_rows), default=0)
+        grid = [list(row_text.ljust(grid_width, "#")) for row_text in layout_rows]
+        grid_height = len(grid)
+        directions = ((1, 0), (-1, 0), (0, 1), (0, -1))
+
+        def in_bounds(col, row):
+            return 0 <= col < grid_width and 0 <= row < grid_height
+
+        def is_open(col, row):
+            return in_bounds(col, row) and grid[row][col] != "#"
+
+        def open_neighbors(cell):
+            col, row = cell
+            return [
+                (col + delta_col, row + delta_row)
+                for delta_col, delta_row in directions
+                if is_open(col + delta_col, row + delta_row)
+            ]
+
+        def find_marker(marker_tile):
+            for row_idx, row_data in enumerate(grid):
+                for col_idx, tile in enumerate(row_data):
+                    if tile == marker_tile:
+                        return (col_idx, row_idx)
+            raise ValueError(f"Missing escape maze marker: {marker_tile}")
+
+        def flood_fill(origin):
+            frontier = deque([origin])
+            seen = {origin}
+            while frontier:
+                current_col, current_row = frontier.popleft()
+                for delta_col, delta_row in directions:
+                    next_cell = (current_col + delta_col, current_row + delta_row)
+                    if next_cell in seen or not is_open(*next_cell):
+                        continue
+                    seen.add(next_cell)
+                    frontier.append(next_cell)
+            return seen
+
+        start_cell = find_marker("S")
+        enemy_cell = find_marker("M")
+        exit_cell = find_marker("E")
+        protected_cells = {start_cell, enemy_cell, exit_cell}
+
+        def carve_loop_from(cell):
+            col, row = cell
+            current_neighbors = set(open_neighbors(cell))
+            carve_options = []
+            for delta_col, delta_row in directions:
+                wall_col = col + delta_col
+                wall_row = row + delta_row
+                beyond_col = col + delta_col * 2
+                beyond_row = row + delta_row * 2
+                if not in_bounds(wall_col, wall_row) or not in_bounds(beyond_col, beyond_row):
+                    continue
+                if grid[wall_row][wall_col] != "#" or not is_open(beyond_col, beyond_row):
+                    continue
+                beyond_cell = (beyond_col, beyond_row)
+                if beyond_cell in current_neighbors:
+                    continue
+                candidate_neighbors = open_neighbors(beyond_cell)
+                if len(candidate_neighbors) < 2:
+                    continue
+                score = len(candidate_neighbors) * 6
+                if beyond_cell not in protected_cells:
+                    score += 2
+                if 0 < wall_col < grid_width - 1 and 0 < wall_row < grid_height - 1:
+                    score += 1
+                carve_options.append((score, wall_col, wall_row))
+            if not carve_options:
+                return False
+            carve_options.sort(reverse=True)
+            _, carve_col, carve_row = carve_options[0]
+            grid[carve_row][carve_col] = "."
+            return True
+
+        def connect_disconnected_sections():
+            accessible = flood_fill(start_cell)
+            while True:
+                disconnected_cells = [
+                    (col_idx, row_idx)
+                    for row_idx in range(grid_height)
+                    for col_idx in range(grid_width)
+                    if is_open(col_idx, row_idx) and (col_idx, row_idx) not in accessible
+                ]
+                if not disconnected_cells:
+                    break
+                source_cell = min(
+                    disconnected_cells,
+                    key=lambda cell: min(
+                        abs(cell[0] - connected[0]) + abs(cell[1] - connected[1])
+                        for connected in accessible
+                    ),
+                )
+                target_cell = min(
+                    accessible,
+                    key=lambda cell: abs(cell[0] - source_cell[0]) + abs(cell[1] - source_cell[1]),
+                )
+                carve_col, carve_row = source_cell
+                while (carve_col, carve_row) != target_cell:
+                    if carve_col != target_cell[0]:
+                        carve_col += 1 if target_cell[0] > carve_col else -1
+                    elif carve_row != target_cell[1]:
+                        carve_row += 1 if target_cell[1] > carve_row else -1
+                    if grid[carve_row][carve_col] == "#":
+                        grid[carve_row][carve_col] = "."
+                accessible = flood_fill(start_cell)
+
+        def dead_end_cells():
+            return [
+                (col_idx, row_idx)
+                for row_idx in range(grid_height)
+                for col_idx in range(grid_width)
+                if is_open(col_idx, row_idx)
+                and (col_idx, row_idx) not in protected_cells
+                and len(open_neighbors((col_idx, row_idx))) <= 1
+            ]
+
+        def closed_floor_pocket_count():
+            accessible = flood_fill(start_cell)
+            return sum(
+                1
+                for row_idx in range(grid_height)
+                for col_idx in range(grid_width)
+                if is_open(col_idx, row_idx) and (col_idx, row_idx) not in accessible
+            )
+
+        connect_disconnected_sections()
+        for _ in range(8):
+            dead_ends = dead_end_cells()
+            if len(dead_ends) <= 3:
+                break
+            dead_ends.sort(key=lambda cell: abs(cell[0] - enemy_cell[0]) + abs(cell[1] - enemy_cell[1]), reverse=True)
+            changed = False
+            for cell in dead_ends[:2]:
+                if carve_loop_from(cell):
+                    changed = True
+            if not changed:
+                break
+
+        accessible_cells = flood_fill(start_cell)
+        if enemy_cell not in accessible_cells or exit_cell not in accessible_cells:
+            raise ValueError("Escape maze build failed to connect the start, enemy, and exit.")
+
+        floor_cells = []
+        wall_cells = []
+        for row_idx, row_data in enumerate(grid):
+            for col_idx, tile in enumerate(row_data):
+                if tile == "#":
+                    wall_cells.append((col_idx, row_idx))
+                else:
+                    if (col_idx, row_idx) not in accessible_cells:
+                        raise ValueError("Escape maze still contains a closed-off floor pocket.")
+                    floor_cells.append((col_idx, row_idx))
+
+        return {
+            "layout": ["".join(row_data) for row_data in grid],
+            "rows": grid_height,
+            "cols": grid_width,
+            "floor_cells": floor_cells,
+            "wall_cells": wall_cells,
+            "player_start_cell": start_cell,
+            "enemy_spawn_cell": enemy_cell,
+            "exit_cell": exit_cell,
+            "report": {
+                "dead_end_count": len(dead_end_cells()),
+                "sealed_pocket_count": closed_floor_pocket_count(),
+                "floor_count": len(floor_cells),
+            },
+        }
+
+    escape_maze_data = build_escape_maze(escape_raw_maze_layout)
+    escape_maze_layout = escape_maze_data["layout"]
+    escape_rows = escape_maze_data["rows"]
+    escape_cols = escape_maze_data["cols"]
+    escape_floor_cells = escape_maze_data["floor_cells"]
+    escape_wall_cells = escape_maze_data["wall_cells"]
+    escape_player_start_cell = escape_maze_data["player_start_cell"]
+    escape_enemy_spawn_cell = escape_maze_data["enemy_spawn_cell"]
+    escape_exit_cell = escape_maze_data["exit_cell"]
+    escape_maze_report = escape_maze_data["report"]
+    escape_world_width = escape_cols * escape_cell_size
+    escape_world_height = escape_rows * escape_cell_size
+    escape_option_rects = [
+        pygame.Rect(screen_width // 2 - 210, screen_height // 2 + 62, 180, 54),
+        pygame.Rect(screen_width // 2 + 30, screen_height // 2 + 62, 180, 54),
+    ]
+    escape_state = {
+        "status": "idle",
+        "message": "",
+        "player": {
+            "x": 0.0,
+            "y": 0.0,
+            "radius": 18.0,
+            "angle": 0.0,
+            "walk_speed": 205.0,
+            "run_multiplier": 1.4,
+            "turn_speed": math.radians(150.0),
+            "mouse_sensitivity": 0.0032,
+            "stamina": 1.0,
+            "max_stamina": 1.0,
+            "drain_rate": 0.33,
+            "recover_rate": 0.23,
+        },
+        "enemy": {
+            "x": 0.0,
+            "y": 0.0,
+            "radius": 24.0,
+            "speed_multiplier": 0.9,
+            "path": [],
+            "path_timer": 0.0,
+            "last_target_cell": None,
+        },
+        "exit_pos": (
+            (escape_exit_cell[0] + 0.5) * escape_cell_size,
+            (escape_exit_cell[1] + 0.5) * escape_cell_size,
+        ),
+        "option_rects": escape_option_rects,
+        "mouse_look_enabled": False,
+        "mouse_turn_pending": 0.0,
+        "required_collectibles": 3,
+        "collected_count": 0,
+        "collectibles": [],
+        "clickable_collectibles": [],
+        "thukuna_surface": None,
+        "death_jumpscare_timer": 0.0,
+        "show_intro": True,
+        "maze_report": escape_maze_report,
+    }
+
+    def escape_is_open_cell(col, row):
+        if col < 0 or row < 0 or col >= escape_cols or row >= escape_rows:
+            return False
+        return escape_maze_layout[row][col] != "#"
+
+    def escape_initial_player_angle():
+        start_col, start_row = escape_player_start_cell
+        for delta_col, delta_row, angle in (
+            (1, 0, 0.0),
+            (0, 1, math.pi / 2),
+            (-1, 0, math.pi),
+            (0, -1, -math.pi / 2),
+        ):
+            if escape_is_open_cell(start_col + delta_col, start_row + delta_row):
+                return angle
+        return 0.0
+
+    def escape_cell_center(cell):
+        col, row = cell
+        return ((col + 0.5) * escape_cell_size, (row + 0.5) * escape_cell_size)
+
+    def escape_world_to_cell(x, y):
+        col = int(max(0, min(escape_cols - 1, x // escape_cell_size)))
+        row = int(max(0, min(escape_rows - 1, y // escape_cell_size)))
+        return (col, row)
+
+    def escape_wrap_angle(angle):
+        return (angle + math.pi) % (math.tau) - math.pi
+
+    def escape_circle_collides(x, y, radius):
+        left = max(0, int((x - radius) // escape_cell_size))
+        right = min(escape_cols - 1, int((x + radius) // escape_cell_size))
+        top = max(0, int((y - radius) // escape_cell_size))
+        bottom = min(escape_rows - 1, int((y + radius) // escape_cell_size))
+        for row in range(top, bottom + 1):
+            for col in range(left, right + 1):
+                if escape_maze_layout[row][col] != "#":
+                    continue
+                wall_left = col * escape_cell_size
+                wall_top = row * escape_cell_size
+                nearest_x = max(wall_left, min(x, wall_left + escape_cell_size))
+                nearest_y = max(wall_top, min(y, wall_top + escape_cell_size))
+                if math.hypot(x - nearest_x, y - nearest_y) < radius:
+                    return True
+        return False
+
+    def move_escape_circle(circle_state, move_x, move_y):
+        if move_x != 0:
+            next_x = circle_state["x"] + move_x
+            if not escape_circle_collides(next_x, circle_state["y"], circle_state["radius"]):
+                circle_state["x"] = next_x
+        if move_y != 0:
+            next_y = circle_state["y"] + move_y
+            if not escape_circle_collides(circle_state["x"], next_y, circle_state["radius"]):
+                circle_state["y"] = next_y
+
+    def stop_escape_collectible_audio():
+        if escape_ambient_channel is not None and escape_ambient_channel.get_busy():
+            escape_ambient_channel.stop()
+
+    def escape_collectible_wall_options(cell):
+        col, row = cell
+        wall_options = []
+        for delta_col, delta_row in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            if not escape_is_open_cell(col + delta_col, row + delta_row):
+                wall_options.append((delta_col, delta_row))
+        return wall_options
+
+    def create_escape_collectible(cell, wall_direction):
+        center_x, center_y = escape_cell_center(cell)
+        wall_dx, wall_dy = wall_direction
+        wall_offset = escape_cell_size * 0.31
+        return {
+            "cell": cell,
+            "x": center_x + wall_dx * wall_offset,
+            "y": center_y + wall_dy * wall_offset,
+            "radius": 20.0,
+            "collect_distance": escape_cell_size * 1.28,
+            "collected": False,
+        }
+
+    def build_escape_collectibles():
+        candidates = []
+        for cell in escape_floor_cells:
+            if cell in (escape_player_start_cell, escape_enemy_spawn_cell, escape_exit_cell):
+                continue
+            if abs(cell[0] - escape_player_start_cell[0]) + abs(cell[1] - escape_player_start_cell[1]) < 4:
+                continue
+            if abs(cell[0] - escape_enemy_spawn_cell[0]) + abs(cell[1] - escape_enemy_spawn_cell[1]) < 4:
+                continue
+            if abs(cell[0] - escape_exit_cell[0]) + abs(cell[1] - escape_exit_cell[1]) < 3:
+                continue
+            wall_options = escape_collectible_wall_options(cell)
+            if wall_options:
+                candidates.append((cell, wall_options))
+        random.shuffle(candidates)
+
+        chosen = []
+        for cell, wall_options in candidates:
+            if any(abs(cell[0] - other["cell"][0]) + abs(cell[1] - other["cell"][1]) < 6 for other in chosen):
+                continue
+            chosen.append(create_escape_collectible(cell, random.choice(wall_options)))
+            if len(chosen) >= escape_state["required_collectibles"]:
+                break
+        if len(chosen) < escape_state["required_collectibles"]:
+            for cell, wall_options in candidates:
+                if any(existing["cell"] == cell for existing in chosen):
+                    continue
+                chosen.append(create_escape_collectible(cell, random.choice(wall_options)))
+                if len(chosen) >= escape_state["required_collectibles"]:
+                    break
+        return chosen[:escape_state["required_collectibles"]]
+
+    def find_escape_path(start_cell, goal_cell):
+        if start_cell == goal_cell:
+            return []
+        frontier = deque([start_cell])
+        parents = {start_cell: None}
+        while frontier:
+            cell = frontier.popleft()
+            if cell == goal_cell:
+                break
+            col, row = cell
+            for delta_col, delta_row in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                next_cell = (col + delta_col, row + delta_row)
+                if next_cell in parents or not escape_is_open_cell(*next_cell):
+                    continue
+                parents[next_cell] = cell
+                frontier.append(next_cell)
+        if goal_cell not in parents:
+            return []
+        path = []
+        current = goal_cell
+        while current is not None:
+            path.append(current)
+            current = parents[current]
+        path.reverse()
+        return path[1:]
+
+    def reset_escape_round(show_intro=False):
+        player = escape_state["player"]
+        enemy = escape_state["enemy"]
+        player["x"], player["y"] = escape_cell_center(escape_player_start_cell)
+        player["angle"] = escape_initial_player_angle()
+        player["stamina"] = player["max_stamina"]
+        enemy["x"], enemy["y"] = escape_cell_center(escape_enemy_spawn_cell)
+        enemy["path"] = []
+        enemy["path_timer"] = 0.0
+        enemy["last_target_cell"] = None
+        if thukuna_dance_video is not None:
+            restart_video_background(thukuna_dance_video)
+        escape_state["collectibles"] = build_escape_collectibles()
+        escape_state["clickable_collectibles"] = []
+        escape_state["collected_count"] = 0
+        escape_state["thukuna_surface"] = None
+        escape_state["death_jumpscare_timer"] = 0.0
+        escape_state["mouse_turn_pending"] = 0.0
+        escape_state["show_intro"] = show_intro
+        escape_state["status"] = "intro" if show_intro else "playing"
+        escape_state["message"] = ""
+        stop_escape_collectible_audio()
+
+    def begin_escape_round_from_intro():
+        escape_state["show_intro"] = False
+        escape_state["status"] = "playing"
+        escape_state["message"] = ""
+        escape_state["mouse_turn_pending"] = 0.0
+        stop_escape_collectible_audio()
+        if thukuna_gugugaga_sound is not None:
+            try:
+                thukuna_gugugaga_sound.stop()
+            except pygame.error:
+                pass
+        if no_response_sound is not None and escape_ambient_channel is not None:
+            try:
+                escape_ambient_channel.play(no_response_sound, loops=-1)
+                escape_ambient_channel.set_volume(0.8)
+            except pygame.error:
+                pass
+
+    def set_escape_mouse_look(enabled):
+        escape_state["mouse_look_enabled"] = enabled
+        escape_state["mouse_turn_pending"] = 0.0
+        try:
+            pygame.event.set_grab(enabled)
+            pygame.mouse.set_visible(not enabled)
+            pygame.mouse.get_rel()
+        except:
+            pass
+
+    def start_escape_mode():
+        nonlocal menu_state, trump_jumpscare_active, epstein_jumpscare_active
+        global in_escape_mode
+        in_escape_mode = True
+        stop_all_audio(stop_music=False)
+        trump_jumpscare_active = False
+        epstein_jumpscare_active = False
+        reset_escape_round(show_intro=True)
+        set_escape_mouse_look(False)
+        menu_state = escape_menu_state
+        if thukuna_gugugaga_sound is not None:
+            try:
+                thukuna_gugugaga_sound.play(loops=-1)
+            except pygame.error:
+                pass
+
+    def return_from_escape_mode():
+        nonlocal menu_state, trump_jumpscare_active, epstein_jumpscare_active
+        global in_escape_mode
+        in_escape_mode = False
+        escape_state["status"] = "idle"
+        escape_state["message"] = ""
+        escape_state["show_intro"] = True
+        set_escape_mouse_look(False)
+        stop_escape_collectible_audio()
+        if thukuna_gugugaga_sound is not None:
+            try:
+                thukuna_gugugaga_sound.stop()
+            except pygame.error:
+                pass
+        trump_jumpscare_active = False
+        epstein_jumpscare_active = False
+        menu_state = "mode"
+        if not home_music_paused:
+            ensure_home_music_running()
+
+    def finish_escape_round(message, status):
+        escape_state["message"] = message
+        escape_state["status"] = status
+        set_escape_mouse_look(False)
+        stop_escape_collectible_audio()
+        if thukuna_gugugaga_sound is not None:
+            try:
+                thukuna_gugugaga_sound.stop()
+            except pygame.error:
+                pass
+
+    def start_escape_death_jumpscare():
+        escape_state["message"] = "CAUGHT BY EPSTEIN"
+        escape_state["status"] = "dead_jumpscare"
+        escape_state["death_jumpscare_timer"] = 0.0
+        set_escape_mouse_look(False)
+        stop_escape_collectible_audio()
+        play_voice_sound(epstein_jumpscare_sound, preferred="primary", priority=True)
+        if thukuna_gugugaga_sound is not None:
+            try:
+                thukuna_gugugaga_sound.stop()
+            except pygame.error:
+                pass
+        set_escape_mouse_look(False)
+        stop_escape_collectible_audio()
+        play_voice_sound(epstein_jumpscare_sound, preferred="primary", priority=True)
+        if thukuna_gugugaga_sound is not None:
+            try:
+                thukuna_gugugaga_sound.stop()
+            except pygame.error:
+                pass
+
+    def collect_escape_collectible(index):
+        collectibles = escape_state["collectibles"]
+        if index < 0 or index >= len(collectibles):
+            return False
+        collectible = collectibles[index]
+        if collectible["collected"]:
+            return False
+        collectible["collected"] = True
+        escape_state["collected_count"] += 1
+        return True
+
+    def handle_escape_left_click(mouse_x, mouse_y):
+        if escape_state["status"] != "playing":
+            return False
+        target_point = (screen_width // 2, screen_height // 2) if escape_state["mouse_look_enabled"] else (mouse_x, mouse_y)
+        for clickable in sorted(escape_state["clickable_collectibles"], key=lambda item: item["distance"]):
+            if clickable["rect"].collidepoint(target_point) and clickable["distance"] <= clickable["collect_distance"]:
+                return collect_escape_collectible(clickable["index"])
+        return False
+
+    def update_escape_mode(dt):
+        if thukuna_dance_video is not None:
+            escape_state["thukuna_surface"] = update_video_background(thukuna_dance_video, dt)
+        if escape_state["status"] == "dead_jumpscare":
+            escape_state["death_jumpscare_timer"] += dt
+            if escape_state["death_jumpscare_timer"] >= 2.0:
+                escape_state["status"] = "dead"
+            return
+        if escape_state["status"] == "intro":
+            stop_escape_collectible_audio()
+            return
+        if escape_state["status"] != "playing":
+            stop_escape_collectible_audio()
+            return
+        player = escape_state["player"]
+        enemy = escape_state["enemy"]
+        keys = pygame.key.get_pressed()
+        turn_input = float(keys[pygame.K_d]) - float(keys[pygame.K_a])
+        player["angle"] += turn_input * player["turn_speed"] * dt
+        if escape_state["mouse_look_enabled"] and escape_state["mouse_turn_pending"] != 0.0:
+            player["angle"] += escape_state["mouse_turn_pending"] * player["mouse_sensitivity"]
+            escape_state["mouse_turn_pending"] = 0.0
+        player["angle"] = escape_wrap_angle(player["angle"])
+
+        forward_input = float(keys[pygame.K_w]) - float(keys[pygame.K_s])
+        is_running = False
+        if forward_input != 0:
+            wants_run = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+            if wants_run and player["stamina"] > 0:
+                is_running = True
+                player["stamina"] = max(0.0, player["stamina"] - player["drain_rate"] * dt)
+            else:
+                player["stamina"] = min(player["max_stamina"], player["stamina"] + player["recover_rate"] * dt)
+            move_speed = player["walk_speed"] * (player["run_multiplier"] if is_running else 1.0)
+            move_x = math.cos(player["angle"]) * forward_input * move_speed * dt
+            move_y = math.sin(player["angle"]) * forward_input * move_speed * dt
+            move_escape_circle(player, move_x, move_y)
+        else:
+            player["stamina"] = min(player["max_stamina"], player["stamina"] + player["recover_rate"] * dt)
+
+        player_cell = escape_world_to_cell(player["x"], player["y"])
+        enemy_cell = escape_world_to_cell(enemy["x"], enemy["y"])
+        enemy["path_timer"] = max(0.0, enemy["path_timer"] - dt)
+        if enemy["path_timer"] <= 0.0 or enemy["last_target_cell"] != player_cell or not enemy["path"]:
+            enemy["path"] = find_escape_path(enemy_cell, player_cell)
+            enemy["last_target_cell"] = player_cell
+            enemy["path_timer"] = 0.18
+
+        if enemy["path"]:
+            target_x, target_y = escape_cell_center(enemy["path"][0])
+            if math.hypot(target_x - enemy["x"], target_y - enemy["y"]) <= 10.0:
+                enemy["path"].pop(0)
+                if enemy["path"]:
+                    target_x, target_y = escape_cell_center(enemy["path"][0])
+                else:
+                    target_x, target_y = player["x"], player["y"]
+        else:
+            target_x, target_y = player["x"], player["y"]
+
+        dx = target_x - enemy["x"]
+        dy = target_y - enemy["y"]
+        dist = math.hypot(dx, dy)
+        if dist > 0:
+            enemy_speed = player["walk_speed"] * enemy["speed_multiplier"]
+            move_escape_circle(enemy, (dx / dist) * enemy_speed * dt, (dy / dist) * enemy_speed * dt)
+
+        collectibles = [item for item in escape_state["collectibles"] if not item["collected"]]
+        if escape_state["status"] == "intro" and thukuna_gugugaga_sound is not None and escape_ambient_channel is not None:
+            if not escape_ambient_channel.get_busy():
+                escape_ambient_channel.play(thukuna_gugugaga_sound, loops=-1)
+            escape_ambient_channel.set_volume(1.0)
+        elif escape_state["status"] == "playing":
+            if no_response_sound is not None and escape_ambient_channel is not None:
+                if not escape_ambient_channel.get_busy():
+                    escape_ambient_channel.play(no_response_sound, loops=-1)
+                escape_ambient_channel.set_volume(0.8)
+        elif collectibles and thukuna_gugugaga_sound is not None and escape_ambient_channel is not None:
+            nearest_distance = min(math.hypot(player["x"] - item["x"], player["y"] - item["y"]) for item in collectibles)
+            hearing_distance = escape_cell_size * 3.6
+            if nearest_distance <= hearing_distance:
+                loudness = (hearing_distance - nearest_distance) / hearing_distance
+                loudness = max(0.0, min(1.0, loudness ** 1.35))
+                if not escape_ambient_channel.get_busy():
+                    escape_ambient_channel.play(thukuna_gugugaga_sound, loops=-1)
+                escape_ambient_channel.set_volume(loudness)
+            else:
+                stop_escape_collectible_audio()
+        else:
+            stop_escape_collectible_audio()
+
+        exit_x, exit_y = escape_state["exit_pos"]
+        exit_is_open = escape_state["collected_count"] >= escape_state["required_collectibles"]
+        if exit_is_open and math.hypot(player["x"] - exit_x, player["y"] - exit_y) <= escape_cell_size * 0.34:
+            finish_escape_round("YOU ESCAPED", "escaped")
+            return
+        if math.hypot(player["x"] - enemy["x"], player["y"] - enemy["y"]) <= player["radius"] + enemy["radius"]:
+            start_escape_death_jumpscare()
+
+    def draw_escape_mode(surface):
+        player = escape_state["player"]
+        enemy = escape_state["enemy"]
+        exit_x, exit_y = escape_state["exit_pos"]
+        exit_is_open = escape_state["collected_count"] >= escape_state["required_collectibles"]
+        if escape_state["status"] == "intro":
+            panel_margin = max(16, screen_width // 80)
+            frame_rect = pygame.Rect(panel_margin, panel_margin, screen_width - panel_margin * 2, screen_height - panel_margin * 2)
+            background = pygame.Surface((screen_width, screen_height))
+            background.fill((31, 29, 31))
+            for stripe_index in range(12):
+                stripe_alpha = 7 + (stripe_index % 4) * 3
+                stripe_surface = pygame.Surface((screen_width, max(18, screen_height // 16)), pygame.SRCALPHA)
+                stripe_surface.fill((255, 255, 255, stripe_alpha))
+                stripe_y = int((stripe_index / 12) * screen_height)
+                background.blit(stripe_surface, (0, stripe_y))
+            surface.blit(background, (0, 0))
+            pygame.draw.rect(surface, (205, 198, 198), frame_rect, 2)
+
+            left_column_x = screen_width * 0.28
+            right_column_x = screen_width * 0.72
+            title_y = screen_height * 0.14
+            media_top = screen_height * 0.28
+            media_width = int(screen_width * 0.30)
+            media_height = int(screen_height * 0.50)
+            left_media_rect = pygame.Rect(0, 0, media_width, media_height)
+            left_media_rect.centerx = int(left_column_x)
+            left_media_rect.y = int(media_top)
+            right_media_rect = left_media_rect.copy()
+            right_media_rect.centerx = int(right_column_x)
+
+            title_font = get_font(max(42, int(screen_height * 0.07)))
+            prompt_font = get_font(max(24, int(screen_height * 0.038)))
+            title_color = (245, 242, 242)
+
+            left_title = title_font.render("Escape from:", True, title_color)
+            left_title_rect = left_title.get_rect(midbottom=(left_media_rect.centerx, int(title_y + left_title.get_height() * 0.5)))
+            surface.blit(left_title, left_title_rect)
+
+            right_title_top = title_font.render("Save 3 Thukunas", True, title_color)
+            right_title_bottom = title_font.render("then escape.", True, title_color)
+            right_title_top_rect = right_title_top.get_rect(midbottom=(right_media_rect.centerx, int(title_y + right_title_top.get_height() * 0.30)))
+            right_title_bottom_rect = right_title_bottom.get_rect(midtop=(right_media_rect.centerx, right_title_top_rect.bottom + 6))
+            surface.blit(right_title_top, right_title_top_rect)
+            surface.blit(right_title_bottom, right_title_bottom_rect)
+
+            if epstein_classroom_original is not None:
+                epstein_preview = pygame.transform.smoothscale(epstein_classroom_original, (left_media_rect.width, left_media_rect.height))
+                surface.blit(epstein_preview, left_media_rect)
+            else:
+                pygame.draw.rect(surface, (52, 48, 48), left_media_rect)
+            pygame.draw.rect(surface, (215, 210, 210), left_media_rect, 2)
+
+            thukuna_preview = escape_state["thukuna_surface"]
+            if thukuna_preview is not None:
+                thukuna_preview = pygame.transform.smoothscale(thukuna_preview, (right_media_rect.width, right_media_rect.height))
+                surface.blit(thukuna_preview, right_media_rect)
+            else:
+                pygame.draw.rect(surface, (8, 8, 8), right_media_rect)
+            pygame.draw.rect(surface, (215, 210, 210), right_media_rect, 2)
+
+            prompt_surface = prompt_font.render("*Click anywhere to continue*", True, title_color)
+            prompt_rect = prompt_surface.get_rect(center=(screen_width // 2, int(screen_height * 0.92)))
+            surface.blit(prompt_surface, prompt_rect)
+            return
+        wall_color_front = (246, 236, 161)
+        wall_color_side = (238, 228, 150)
+        background_color = (248, 239, 170)
+        outline_color = (20, 16, 5)
+        surface.fill(background_color)
+        escape_state["clickable_collectibles"] = []
+        horizon_y = screen_height // 2
+        pygame.draw.line(surface, outline_color, (0, horizon_y), (screen_width, horizon_y), 3)
+
+        fov = math.radians(68)
+        projection_distance = (screen_width / 2) / math.tan(fov / 2)
+        ray_step = 3
+        depth_buffer = [float("inf")] * (screen_width // ray_step + 2)
+
+        for ray_index, screen_x in enumerate(range(0, screen_width, ray_step)):
+            camera_x = ((screen_x + ray_step * 0.5) / screen_width) - 0.5
+            ray_angle = player["angle"] + camera_x * fov
+            dir_x = math.cos(ray_angle)
+            dir_y = math.sin(ray_angle)
+            map_x, map_y = escape_world_to_cell(player["x"], player["y"])
+            delta_dist_x = float("inf") if abs(dir_x) < 1e-6 else abs(escape_cell_size / dir_x)
+            delta_dist_y = float("inf") if abs(dir_y) < 1e-6 else abs(escape_cell_size / dir_y)
+            if dir_x < 0:
+                step_x = -1
+                side_dist_x = (player["x"] - map_x * escape_cell_size) / (-dir_x)
+            else:
+                step_x = 1
+                side_dist_x = (((map_x + 1) * escape_cell_size) - player["x"]) / max(dir_x, 1e-6)
+            if dir_y < 0:
+                step_y = -1
+                side_dist_y = (player["y"] - map_y * escape_cell_size) / (-dir_y)
+            else:
+                step_y = 1
+                side_dist_y = (((map_y + 1) * escape_cell_size) - player["y"]) / max(dir_y, 1e-6)
+            hit_side = 0
+            wall_distance = escape_cell_size * max(escape_cols, escape_rows)
+            while True:
+                if side_dist_x < side_dist_y:
+                    wall_distance = side_dist_x
+                    side_dist_x += delta_dist_x
+                    map_x += step_x
+                    hit_side = 0
+                else:
+                    wall_distance = side_dist_y
+                    side_dist_y += delta_dist_y
+                    map_y += step_y
+                    hit_side = 1
+                if not escape_is_open_cell(map_x, map_y):
+                    break
+            corrected_distance = max(1.0, wall_distance * math.cos(ray_angle - player["angle"]))
+            depth_buffer[ray_index] = corrected_distance
+            slice_height = int(min(screen_height * 1.6, (escape_cell_size * projection_distance) / corrected_distance))
+            wall_top = max(0, horizon_y - slice_height // 2)
+            wall_rect = pygame.Rect(screen_x, wall_top, ray_step + 1, min(screen_height, slice_height))
+            pygame.draw.rect(surface, wall_color_side if hit_side else wall_color_front, wall_rect)
+            pygame.draw.line(surface, outline_color, (wall_rect.x, wall_rect.y), (wall_rect.right, wall_rect.y), 2)
+            pygame.draw.line(surface, outline_color, (wall_rect.x, wall_rect.bottom), (wall_rect.right, wall_rect.bottom), 2)
+            pygame.draw.line(surface, outline_color, (wall_rect.x, wall_rect.y), (wall_rect.x, wall_rect.bottom), 1)
+
+        def draw_escape_billboard(world_x, world_y, radius, *, image=None, color=(220, 60, 60), label=None, border_color=None, label_color=None):
+            dx = world_x - player["x"]
+            dy = world_y - player["y"]
+            raw_distance = math.hypot(dx, dy)
+            if raw_distance <= 1.0:
+                return None
+            angle_offset = escape_wrap_angle(math.atan2(dy, dx) - player["angle"])
+            if abs(angle_offset) > fov * 0.72:
+                return None
+            corrected_distance = raw_distance * math.cos(angle_offset)
+            if corrected_distance <= 1.0:
+                return None
+            sprite_height = int(((radius * 2.4) * projection_distance) / corrected_distance)
+            if sprite_height < 10:
+                return None
+            center_x = int(screen_width / 2 + math.tan(angle_offset) * projection_distance)
+            sprite_width = sprite_height
+            if image is not None:
+                aspect_ratio = image.get_width() / max(1, image.get_height())
+                sprite_width = int(sprite_height * max(0.72, min(1.45, aspect_ratio)))
+            ray_index = max(0, min(len(depth_buffer) - 1, center_x // ray_step))
+            if corrected_distance >= depth_buffer[ray_index] - 6:
+                return None
+            sprite_rect = pygame.Rect(center_x - sprite_width // 2, horizon_y - sprite_height // 2, sprite_width, sprite_height)
+            border_color = outline_color if border_color is None else border_color
+            if image is not None:
+                scaled_image = pygame.transform.smoothscale(image, (sprite_rect.width, sprite_rect.height))
+                surface.blit(scaled_image, sprite_rect)
+                pygame.draw.rect(surface, border_color, sprite_rect, 2)
+            else:
+                pygame.draw.rect(surface, color, sprite_rect, border_radius=12)
+                pygame.draw.rect(surface, border_color, sprite_rect, 3, border_radius=12)
+            if label:
+                draw_text(surface, label, sprite_rect.x + 4, sprite_rect.bottom + 6, color=outline_color if label_color is None else label_color, size=18)
+            return {"rect": sprite_rect, "distance": corrected_distance, "raw_distance": raw_distance}
+
+        thukuna_frame = escape_state["thukuna_surface"]
+        for index, collectible in enumerate(escape_state["collectibles"]):
+            if collectible["collected"]:
+                continue
+            collectible_info = draw_escape_billboard(
+                collectible["x"],
+                collectible["y"],
+                collectible["radius"],
+                image=thukuna_frame,
+                color=(215, 70, 70),
+                label="THUKUNA",
+                border_color=(190, 30, 30),
+            )
+            if collectible_info is not None:
+                collectible_info["index"] = index
+                collectible_info["collect_distance"] = collectible["collect_distance"]
+                escape_state["clickable_collectibles"].append(collectible_info)
+
+        draw_escape_billboard(enemy["x"], enemy["y"], enemy["radius"], image=epstein_classroom_original, label="EPSTEIN")
+        exit_info = draw_escape_billboard(
+            exit_x,
+            exit_y,
+            24.0,
+            color=(50, 185, 72) if exit_is_open else (220, 50, 50),
+            label="EXIT" if exit_is_open else "LOCKED EXIT",
+            border_color=(20, 70, 20) if exit_is_open else outline_color,
+        )
+        if exit_info is not None:
+            inner_rect = exit_info["rect"].inflate(-max(12, exit_info["rect"].width // 4), -max(12, exit_info["rect"].height // 5))
+            pygame.draw.rect(surface, (24, 28, 24), inner_rect, border_radius=8)
+            pygame.draw.rect(surface, (210, 235, 215) if exit_is_open else (255, 230, 230), inner_rect, 2, border_radius=8)
+            if not exit_is_open:
+                draw_lock_icon(surface, exit_info["rect"].centerx, exit_info["rect"].centery, color=(255, 235, 235))
+
+        
+
+        hud_rect = pygame.Rect(16, 16, 390, 166)
+        pygame.draw.rect(surface, (245, 233, 150), hud_rect, border_radius=18)
+        pygame.draw.rect(surface, outline_color, hud_rect, 3, border_radius=18)
+        draw_text(surface, "Escape From Epstein", hud_rect.x + 16, hud_rect.y + 12, color=outline_color, size=28)
+        draw_text(surface, "Collect 3 thukuna videos to open the corner exit.", hud_rect.x + 16, hud_rect.y + 48, color=outline_color, size=18)
+        mouse_look_label = "Mouse look: ON" if escape_state["mouse_look_enabled"] else "Mouse look: OFF"
+        draw_text(surface, mouse_look_label, hud_rect.x + 16, hud_rect.y + 72, color=outline_color, size=18)
+        draw_text(surface, f"Collected: {escape_state['collected_count']}/{escape_state['required_collectibles']}", hud_rect.x + 16, hud_rect.y + 96, color=outline_color, size=18)
+        draw_text(surface, "Left click videos | Right click toggles mouse look", hud_rect.x + 16, hud_rect.y + 118, color=outline_color, size=16)
+        stamina_rect = pygame.Rect(hud_rect.x + 16, hud_rect.y + 142, hud_rect.width - 32, 18)
+        pygame.draw.rect(surface, (225, 218, 160), stamina_rect, border_radius=8)
+        stamina_ratio = 0.0 if player["max_stamina"] <= 0 else player["stamina"] / player["max_stamina"]
+        pygame.draw.rect(surface, (70, 155, 255), (stamina_rect.x, stamina_rect.y, int(stamina_rect.width * stamina_ratio), stamina_rect.height), border_radius=8)
+        pygame.draw.rect(surface, outline_color, stamina_rect, 2, border_radius=8)
+
+        if exit_is_open and escape_state["status"] == "playing":
+            opened_surface = get_font(32).render("exit is opened", True, (220, 35, 35))
+            opened_rect = opened_surface.get_rect(midtop=(screen_width // 2, 18))
+            panel = opened_rect.inflate(26, 16)
+            pygame.draw.rect(surface, (255, 238, 202), panel, border_radius=16)
+            pygame.draw.rect(surface, (220, 35, 35), panel, 3, border_radius=16)
+            surface.blit(opened_surface, opened_rect)
+
+        
+
+        if escape_state["status"] == "dead_jumpscare" and epstein_classroom_original is not None:
+            overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+            overlay.fill((12, 8, 8, 105))
+            surface.blit(overlay, (0, 0))
+            progress = min(1.0, escape_state["death_jumpscare_timer"] / 0.1)
+            start_scale = 0.55
+            target_scale = (screen_height * 2.0) / max(1, epstein_classroom_original.get_height())
+            scale_factor = start_scale + (target_scale - start_scale) * progress
+            scaled_w = int(epstein_classroom_original.get_width() * scale_factor)
+            scaled_h = int(epstein_classroom_original.get_height() * scale_factor)
+            scaled_epstein = pygame.transform.smoothscale(epstein_classroom_original, (scaled_w, scaled_h))
+            start_x = screen_width // 2 - scaled_w // 2
+            start_y = screen_height
+            target_x = screen_width // 2 - scaled_w // 2
+            target_y = -int(screen_height * 0.12)
+            current_y = start_y + (target_y - start_y) * progress
+            surface.blit(scaled_epstein, (start_x, int(current_y)))
+
+        if escape_state["status"] in ("escaped", "dead"):
+            if escape_state.get("end_audio_played", False) is False:
+                escape_state["end_audio_played"] = True
+                escape_state["mambo_delay_timer"] = 2.0
+                if thukuna_gugugaga_sound is not None:
+                    try:
+                        thukuna_gugugaga_sound.stop()
+                    except pygame.error:
+                        pass
+            overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+            overlay.fill((8, 8, 8, 155))
+            surface.blit(overlay, (0, 0))
+            panel_rect = pygame.Rect(screen_width // 2 - 270, screen_height // 2 - 120, 540, 250)
+            pygame.draw.rect(surface, (245, 233, 150), panel_rect, border_radius=22)
+            pygame.draw.rect(surface, outline_color, panel_rect, 4, border_radius=22)
+            title = escape_state["message"] or ("YOU ESCAPED" if escape_state["status"] == "escaped" else "CAUGHT BY EPSTEIN")
+            title_surface = get_font(36).render(title, True, outline_color)
+            title_rect = title_surface.get_rect(center=(panel_rect.centerx, panel_rect.y + 56))
+            surface.blit(title_surface, title_rect)
+            subtitle = "Try again or head back to the mode screen."
+            draw_text(surface, subtitle, panel_rect.x + 78, panel_rect.y + 98, color=outline_color, size=22)
+            draw_button(surface, escape_option_rects[0], "Exit", fill_color=(190, 150, 60))
+            draw_button(surface, escape_option_rects[1], "Continue", fill_color=(70, 130, 220))
+
     player_count = 0
     selected_players = []
     circles = []
@@ -2187,6 +3188,7 @@ def simulate():
     screen_shake_timer = 0.0
     screen_shake_strength = 0.0
     faker_ultimate_hitstop_timer = 0.0
+    right_mouse_held = False
     gojo_red_colors = {
         "particle": [
             (255, 90, 90),
@@ -2329,6 +3331,8 @@ def simulate():
             int(round(ref_rect.width / mode_reference_width * screen_width)),
             int(round(ref_rect.height / mode_reference_height * screen_height)),
         )
+        if mode_name == "character_info":
+            scaled_rect.x += 20
         mode_rects.append(scaled_rect)
         image = mode_images.get(mode_name)
         if image is not None:
@@ -2345,12 +3349,26 @@ def simulate():
     mode_title_visual_right = mode_title_rect.right + (50 if mode_title_surface is not None else 0)
     music_gap_left = mode_title_visual_right + 18
     music_gap_right = character_info_rect.x - 18
-    music_toggle_size = max(68, min(116, character_info_rect.height - 40, max(68, music_gap_right - music_gap_left)))
+    music_controls_width = max(110, music_gap_right - music_gap_left)
+    music_toggle_size = max(58, min(98, character_info_rect.height - 44, music_controls_width - 34))
     music_toggle_rect = pygame.Rect(
-        music_gap_left + max(0, (music_gap_right - music_gap_left - music_toggle_size) // 2),
+        music_gap_right - music_toggle_size + 30,
         character_info_rect.y + max(0, (character_info_rect.height - music_toggle_size) // 2),
         music_toggle_size,
         music_toggle_size,
+    )
+    music_slider_gap = max(10, min(18, music_controls_width // 8))
+    music_slider_rect = pygame.Rect(
+        max(music_gap_left, music_toggle_rect.x - music_slider_gap - 26),
+        character_info_rect.y + 10,
+        26,
+        max(92, character_info_rect.height - 20),
+    )
+    music_skip_rect = pygame.Rect(
+        music_slider_rect.x,
+        music_slider_rect.bottom + 8,
+        music_slider_rect.width,
+        max(36, music_slider_rect.width),
     )
     zombie_count_rect = pygame.Rect(padding + original_window_width // 2 - 180, screen_height // 2 - 30, 360, 70)
     zombie_stage_back_rect = pygame.Rect(padding + original_window_width - 206, 38, 130, 54)
@@ -2371,7 +3389,7 @@ def simulate():
         pygame.Rect(padding + original_window_width // 2 - 380, screen_height // 2 - 75, 170, 150),
         pygame.Rect(padding + original_window_width // 2 - 190, screen_height // 2 - 75, 170, 150),
         pygame.Rect(padding + original_window_width // 2, screen_height // 2 - 75, 170, 150),
-        pygame.Rect(padding + original_window_width // 2 + 190, screen_height // 2 - 75, 170, 150),
+        pygame.Rect(padding + original_window_width // 2 + 190, screen_height // 2 - 75, 200, 150),
     ]
     info_card_rects = [
         pygame.Rect(padding + 20, 138, 168, 150),
@@ -2379,6 +3397,7 @@ def simulate():
         pygame.Rect(padding + 372, 138, 168, 150),
         pygame.Rect(padding + 548, 138, 168, 150),
         pygame.Rect(padding + 724, 138, 168, 150),
+        pygame.Rect(padding + 900, 138, 168, 150),
     ]
     info_detail_rect = pygame.Rect(padding + 30, 310, original_window_width - 60, screen_height - 340)
     custom_input_rect = pygame.Rect(padding + original_window_width // 2 - 180, screen_height // 2 - 30, 360, 70)
@@ -2409,7 +3428,10 @@ def simulate():
                 (margin, square_size - margin),
                 (square_size - margin, square_size - margin),
             ]
+        if count <= 0:
+            return []
         cols = math.ceil(math.sqrt(count))
+        cols = max(1, cols)
         rows = math.ceil(count / cols)
         usable_w = max(1.0, square_size - margin * 2)
         usable_h = max(1.0, square_size - margin * 2)
@@ -2843,9 +3865,11 @@ def simulate():
             return False
 
     def start_match():
-        nonlocal menu_state, circles, bullets, meteors, damage_texts, red_explosions, purple_trails, faker_waves, faker_dust_trails, faker_magic_flames, zomboss_gadgets, zomboss_warning_zones, zomboss_beams, zomboss_shockwaves, epstein_decoys, epstein_curses, epstein_warning_zones, epstein_beams, epstein_shockwaves, screen_shake_timer, screen_shake_strength, faker_ultimate_hitstop_timer, elapsed_time, battle_time, current_wave_elapsed_time, last_cleared_wave_time, result_winner_name, result_show_options, result_special_click_needed, square_size, arena_left, arena_top, arena_width, arena_height, result_button_rects, match_assets, tube_top_height, zombie_spawn_timer, zomboss_wave_summons_spawned, current_wave, mambos_spawned_in_wave, mambos_to_spawn, wave_in_progress, wave_complete, zombie_music_mode, pending_zombie_resume_data, selected_zombie_stage_wave, home_music_paused
+        nonlocal menu_state, circles, bullets, meteors, damage_texts, red_explosions, purple_trails, faker_waves, faker_dust_trails, faker_magic_flames, zomboss_gadgets, zomboss_warning_zones, zomboss_beams, zomboss_shockwaves, epstein_decoys, epstein_curses, epstein_warning_zones, epstein_beams, epstein_shockwaves, screen_shake_timer, screen_shake_strength, faker_ultimate_hitstop_timer, elapsed_time, battle_time, current_wave_elapsed_time, last_cleared_wave_time, result_winner_name, result_show_options, result_special_click_needed, square_size, arena_left, arena_top, arena_width, arena_height, result_button_rects, match_assets, tube_top_height, zombie_spawn_timer, zomboss_wave_summons_spawned, current_wave, mambos_spawned_in_wave, mambos_to_spawn, wave_in_progress, wave_complete, zombie_music_mode, pending_zombie_resume_data, selected_zombie_stage_wave, home_music_paused, battle_music_mode
         menu_state = "play"
-        pygame.mixer.music.stop()
+        battle_music_mode = True
+        if pygame.mixer.music.get_busy():
+            pygame.mixer.music.set_volume(get_home_music_volume(current_home_music_file))
         home_music_paused = False
         if game_mode == "zombie":
             tube_top_height = 80
@@ -2914,11 +3938,13 @@ def simulate():
         result_special_click_needed = False
 
     def reset_to_home():
-        nonlocal menu_state, game_mode, bot_difficulty, hp_multiplier, custom_count_input, zombie_count_input, zombie_stage_page, selected_zombie_stage_wave, player_count, selected_players, circles, bullets, meteors, damage_texts, red_explosions, purple_trails, faker_waves, faker_dust_trails, faker_magic_flames, zomboss_gadgets, zomboss_warning_zones, zomboss_beams, zomboss_shockwaves, epstein_decoys, epstein_curses, epstein_warning_zones, epstein_beams, epstein_shockwaves, screen_shake_timer, screen_shake_strength, faker_ultimate_hitstop_timer, elapsed_time, battle_time, result_winner_name, result_show_options, result_special_click_needed, square_size, arena_left, arena_top, arena_width, arena_height, result_button_rects, match_assets, tube_top_height, zombie_spawn_timer, zomboss_wave_summons_spawned, zombie_music_mode
+        nonlocal menu_state, game_mode, bot_difficulty, hp_multiplier, custom_count_input, zombie_count_input, zombie_stage_page, selected_zombie_stage_wave, player_count, selected_players, circles, bullets, meteors, damage_texts, red_explosions, purple_trails, faker_waves, faker_dust_trails, faker_magic_flames, zomboss_gadgets, zomboss_warning_zones, zomboss_beams, zomboss_shockwaves, epstein_decoys, epstein_curses, epstein_warning_zones, epstein_beams, epstein_shockwaves, screen_shake_timer, screen_shake_strength, faker_ultimate_hitstop_timer, elapsed_time, battle_time, result_winner_name, result_show_options, result_special_click_needed, square_size, arena_left, arena_top, arena_width, arena_height, result_button_rects, match_assets, tube_top_height, zombie_spawn_timer, zomboss_wave_summons_spawned, zombie_music_mode, battle_music_mode
         stop_all_audio()
-        pygame.mixer.music.stop()
+        battle_music_mode = False
+        if pygame.mixer.music.get_busy():
+            pygame.mixer.music.set_volume(get_home_music_volume(current_home_music_file))
         menu_state = "mode"
-        start_home_music()
+        ensure_home_music_running()
         game_mode = "sim"
         bot_difficulty = "medium"
         hp_multiplier = 1.0
@@ -2942,7 +3968,8 @@ def simulate():
         ]
 
     def go_to_mode_screen():
-        nonlocal menu_state
+        nonlocal menu_state, battle_music_mode
+        battle_music_mode = False
         menu_state = "mode"
         ensure_home_music_running()
         player_count = 0
@@ -3058,7 +4085,7 @@ def simulate():
 
     def activate_gojo_hollow_purple(circle):
         nonlocal bullets
-        if circle.health <= 0 or circle.ultimate_active or circle.gojo_attack_count < 5 or circle.target is None or circle.target.health <= 0:
+        if circle.health <= 0 or circle.ultimate_active or circle.gojo_attack_count < 3 or circle.target is None or circle.target.health <= 0:
             return
         owner_index = circles.index(circle) if circle in circles else -1
         bullets = [
@@ -3371,6 +4398,9 @@ def simulate():
         )
         rocket.wall_bounces_remaining = 0
         rocket.target_index = circles.index(target)
+        rocket.turn_rate = math.pi  # Autoaim like meteor
+        rocket.field_damage_per_second = 50
+        rocket.field_radius = rocket.size
         rocket.elon_failed_landing = random.random() < 0.3
         rocket.elon_has_entered_arena = False
         rocket.elon_border_passes_remaining = 1
@@ -3508,16 +4538,20 @@ def simulate():
         )
         ultimate_rocket.wall_bounces_remaining = 0
         ultimate_rocket.target_index = circles.index(primary_target)
+        ultimate_rocket.turn_rate = 0  # No auto aim
+        ultimate_rocket.field_damage_per_second = 0
+        ultimate_rocket.field_radius = 0
+        ultimate_rocket.elon_mars_timer = 15.0  # Disappear after 15 seconds
         ultimate_rocket.elon_returning = False
         ultimate_rocket.elon_passenger_indices = []
         ultimate_rocket.elon_has_entered_arena = False
         ultimate_rocket.elon_border_passes_remaining = 1
         bullets.append(ultimate_rocket)
+        apply_elon_global_rocket_damage(circle, 600)  # Deal 600 damage to everything when passing through
         circle.elon_ultimate_active = True
         circle.elon_ultimate_timer = 12.0
         circle.elon_ultimate_cooldown = 7.0
         circle.elon_skill_state = {"type": "mars_colonization", "timer": 1.1}
-        apply_elon_global_rocket_damage(circle, lambda target_circle: max(500.0, target_circle.max_health * 0.05))
         if elon_skill_voice_sounds:
             play_voice_sound(random.choice(elon_skill_voice_sounds), preferred="secondary")
         screen_shake_timer = max(screen_shake_timer, 0.3)
@@ -3811,7 +4845,7 @@ def simulate():
         circle.epstein_ultimate_stage = "summon_intro"
         circle.epstein_voice_intro_timer = 7.0
         circle.epstein_banner_timer = 7.0
-        circle.ultimate_duration_timer = 0.0
+        circle.ultimate_duration_timer = 12.0
         circle.ultimate_cooldown_timer = 0.0
         circle.epstein_untargetable = True
         circle.epstein_minor_attack_timer = 0.0
@@ -3914,6 +4948,13 @@ def simulate():
                     circle.epstein_untargetable = True
                 else:
                     circle.epstein_untargetable = titan_alive or getattr(circle, "epstein_shadowstep_invuln_timer", 0.0) > 0
+
+                if circle.ultimate_active:
+                    circle.ultimate_duration_timer -= dt
+                    if circle.ultimate_duration_timer <= 0:
+                        circle.ultimate_active = False
+                        circle.epstein_ultimate_stage = None
+                        circle.epstein_untargetable = False
 
                 if circle.epstein_passive_timer <= 0 and circle.health > 0:
                     corrupt_epstein_network(circle)
@@ -4104,6 +5145,13 @@ def simulate():
             gojo_voice_intro_active = False
             epstein_voice_intro_active = False
         elapsed_time += sim_dt if menu_state == "play" else real_dt
+        # Removed background music for game modes screen
+        # if menu_state == "mode" and not home_music_paused and pygame.mixer.get_init():
+        #     try:
+        #         if not pygame.mixer.music.get_busy():
+        #             play_next_home_music()
+        #     except pygame.error:
+        #         pass
         if epstein_jumpscare_active:
             epstein_jumpscare_timer += real_dt
             if epstein_jumpscare_timer > 1.5:
@@ -4114,15 +5162,37 @@ def simulate():
                 trump_jumpscare_active = False
         cooldown_multiplier = 2 if game_mode == "dummy" else 1
         for event in pygame.event.get():
-            if event.type == pygame.USEREVENT + 1:
-                play_next_home_music()
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3 and menu_state == "mode":
-                trump_jumpscare_active = True
-                trump_jumpscare_timer = 0.0
-                if epstein_jumpscare_sound:
-                    epstein_jumpscare_sound.play()
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+                if menu_state == "mode":
+                    mx, my = event.pos
+                    if fullscreen:
+                        scale_x = window_width / desktop_width
+                        scale_y = window_height / desktop_height
+                        mx = int(mx * scale_x)
+                        my = int(my * scale_y)
+                    epstein_clicked = False
+                    if epstein_classroom_original:
+                        scaled_h = epstein_classroom_original.get_height() // 3
+                        scaled_w = epstein_classroom_original.get_width() // 3
+                        epstein_rect = pygame.Rect(0, screen_height - scaled_h, scaled_w, scaled_h)
+                        if epstein_rect.collidepoint(mx, my):
+                            start_escape_mode()
+                            epstein_clicked = True
+                    if not epstein_clicked:
+                        start_escape_mode()
+                elif menu_state == escape_menu_state:
+                    if escape_state["status"] == "playing":
+                        set_escape_mouse_look(not escape_state["mouse_look_enabled"])
+                elif menu_state != "mode":
+                    right_mouse_held = True
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 3:
+                if menu_state != escape_menu_state:
+                    right_mouse_held = False
             elif event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.USEREVENT + 1:
+                if not in_escape_mode:
+                    play_next_home_music()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     if menu_state == "play" and game_mode != "zombie":
@@ -4134,6 +5204,14 @@ def simulate():
                             menu_state = "play"
                     elif menu_state == "play" and game_mode == "zombie":
                         menu_state = "pause"
+                    elif menu_state == "zombie_stage_select":
+                        go_to_mode_screen()
+                    elif menu_state == "select":
+                        go_to_mode_screen()
+                    elif menu_state == "bot_difficulty":
+                        go_to_mode_screen()
+                    elif menu_state == escape_menu_state or (menu_state in ("mode", "pause") and escape_state.get("status") in ("escaped", "won", "dead", "dead_jumpscare", "intro")):
+                        return_from_escape_mode()
                     elif menu_state == "select":
                         go_to_mode_screen()
                     elif menu_state == "bot_difficulty":
@@ -4221,61 +5299,80 @@ def simulate():
                     mx = int(mx * scale_x)
                     my = int(my * scale_y)
                 if menu_state == "mode":
-                    if music_toggle_rect.collidepoint(mx, my):
+                    if music_slider_rect.collidepoint(mx, my):
+                        music_slider_dragging = True
+                        set_home_music_volume_from_slider_y(my)
+                    elif music_toggle_rect.collidepoint(mx, my):
                         toggle_home_music_pause()
+                    elif music_skip_rect.collidepoint(mx, my):
+                        if pygame.mixer.get_init():
+                            play_next_home_music()
                     else:
-                        clicked_mode = None
-                        for idx, rect in enumerate(mode_rects):
-                            if rect.collidepoint(mx, my) and idx < len(mode_button_names):
-                                clicked_mode = mode_button_names[idx]
-                                break
-                        if clicked_mode == "character_info":
-                            character_info_selected = "Mika"
-                            menu_state = "character_info"
-                        elif clicked_mode == "2p_simulation":
-                            game_mode = "sim"
-                            player_count = 2
-                            selected_players = []
-                            menu_state = "select"
-                        elif clicked_mode == "vs_bot":
-                            game_mode = "bot"
-                            player_count = 2
-                            selected_players = []
-                            menu_state = "bot_difficulty"
-                        elif clicked_mode == "vs_player":
-                            game_mode = "pvp"
-                            player_count = 2
-                            selected_players = []
-                            menu_state = "select"
-                        elif clicked_mode == "custom_simulation":
-                            game_mode = "custom"
-                            player_count = 0
-                            custom_count_input = ""
-                            selected_players = []
-                            menu_state = "custom_count"
-                        elif clicked_mode == "mambo_apocalypse":
-                            game_mode = "zombie"
-                            pending_zombie_resume_data = None
-                            player_count = 0
-                            zombie_count_input = ""
-                            selected_players = []
-                            selected_zombie_stage_wave = min(get_highest_unlocked_zombie_wave(), max(1, selected_zombie_stage_wave))
-                            zombie_stage_page = get_zombie_stage_page_for_wave(selected_zombie_stage_wave)
-                            menu_state = "zombie_count"
-                        elif clicked_mode == "dummy_testing":
-                            game_mode = "dummy"
-                            player_count = 1
-                            selected_players = []
-                            menu_state = "select"
-                    if epstein_classroom_original and not epstein_jumpscare_active:
-                        scaled_h = epstein_classroom_original.get_height() // 3
-                        scaled_w = epstein_classroom_original.get_width() // 3
-                        epstein_rect = pygame.Rect(0, screen_height - scaled_h, scaled_w, scaled_h)
-                        if epstein_rect.collidepoint(mx, my):
-                            epstein_jumpscare_active = True
-                            epstein_jumpscare_timer = 0.0
-                            if epstein_jumpscare_sound:
-                                epstein_jumpscare_sound.play()
+                        epstein_clicked = False
+                        if epstein_classroom_original:
+                            scaled_h = epstein_classroom_original.get_height() // 3
+                            scaled_w = epstein_classroom_original.get_width() // 3
+                            epstein_rect = pygame.Rect(0, screen_height - scaled_h, scaled_w, scaled_h)
+                            if epstein_rect.collidepoint(mx, my):
+                                epstein_clicked = True
+                                epstein_jumpscare_active = True
+                                epstein_jumpscare_timer = 0.0
+                                if epstein_jumpscare_sound:
+                                    epstein_jumpscare_sound.play()
+                        if not epstein_clicked:
+                            clicked_mode = None
+                            for idx, rect in enumerate(mode_rects):
+                                if rect.collidepoint(mx, my) and idx < len(mode_button_names):
+                                    clicked_mode = mode_button_names[idx]
+                                    break
+                            if clicked_mode == "character_info":
+                                character_info_selected = "Mika"
+                                menu_state = "character_info"
+                            elif clicked_mode == "2p_simulation":
+                                game_mode = "sim"
+                                player_count = 2
+                                selected_players = []
+                                menu_state = "select"
+                            elif clicked_mode == "vs_bot":
+                                game_mode = "bot"
+                                player_count = 2
+                                selected_players = []
+                                menu_state = "bot_difficulty"
+                            elif clicked_mode == "vs_player":
+                                game_mode = "pvp"
+                                player_count = 2
+                                selected_players = []
+                                menu_state = "select"
+                            elif clicked_mode == "custom_simulation":
+                                game_mode = "custom"
+                                player_count = 0
+                                custom_count_input = ""
+                                selected_players = []
+                                menu_state = "custom_count"
+                            elif clicked_mode == "mambo_apocalypse":
+                                game_mode = "zombie"
+                                pending_zombie_resume_data = None
+                                player_count = 0
+                                zombie_count_input = ""
+                                selected_players = []
+                                selected_zombie_stage_wave = min(get_highest_unlocked_zombie_wave(), max(1, selected_zombie_stage_wave))
+                                zombie_stage_page = get_zombie_stage_page_for_wave(selected_zombie_stage_wave)
+                                menu_state = "zombie_count"
+                            elif clicked_mode == "dummy_testing":
+                                game_mode = "dummy"
+                                player_count = 1
+                                selected_players = []
+                                menu_state = "select"
+                elif menu_state == escape_menu_state:
+                    if escape_state["status"] == "intro":
+                        begin_escape_round_from_intro()
+                    elif escape_state["status"] == "playing":
+                        handle_escape_left_click(mx, my)
+                    else:
+                        if escape_option_rects[0].collidepoint(mx, my):
+                            return_from_escape_mode()
+                        elif escape_option_rects[1].collidepoint(mx, my):
+                            reset_escape_round()
                 elif menu_state == "bot_difficulty":
                     difficulty_names = ["easy", "medium", "hard", "impossible"]
                     for idx, rect in enumerate(difficulty_rects):
@@ -4290,32 +5387,37 @@ def simulate():
                     if select_back_rect.collidepoint(mx, my):
                         go_to_mode_screen()
                     elif info_card_rects[0].collidepoint(mx, my):
-                        char_idx = character_info_card_page * 5 + 0
+                        char_idx = character_info_card_page * 6 + 0
                         if char_idx < len(info_order):
                             character_info_selected = info_order[char_idx]
                             character_info_page = 0
                     elif info_card_rects[1].collidepoint(mx, my):
-                        char_idx = character_info_card_page * 5 + 1
+                        char_idx = character_info_card_page * 6 + 1
                         if char_idx < len(info_order):
                             character_info_selected = info_order[char_idx]
                             character_info_page = 0
                     elif info_card_rects[2].collidepoint(mx, my):
-                        char_idx = character_info_card_page * 5 + 2
+                        char_idx = character_info_card_page * 6 + 2
                         if char_idx < len(info_order):
                             character_info_selected = info_order[char_idx]
                             character_info_page = 0
                     elif info_card_rects[3].collidepoint(mx, my):
-                        char_idx = character_info_card_page * 5 + 3
+                        char_idx = character_info_card_page * 6 + 3
                         if char_idx < len(info_order):
                             character_info_selected = info_order[char_idx]
                             character_info_page = 0
                     elif info_card_rects[4].collidepoint(mx, my):
-                        char_idx = character_info_card_page * 5 + 4
+                        char_idx = character_info_card_page * 6 + 4
+                        if char_idx < len(info_order):
+                            character_info_selected = info_order[char_idx]
+                            character_info_page = 0
+                    elif info_card_rects[5].collidepoint(mx, my):
+                        char_idx = character_info_card_page * 6 + 5
                         if char_idx < len(info_order):
                             character_info_selected = info_order[char_idx]
                             character_info_page = 0
                     elif character_info_card_next_rect.collidepoint(mx, my):
-                        max_page = (len(info_order) - 1) // 5
+                        max_page = (len(info_order) - 1) // 6
                         if character_info_card_page < max_page:
                             character_info_card_page += 1
                         character_info_page = 0
@@ -4450,13 +5552,25 @@ def simulate():
                             circle.health = 0
                             break
                     show_result_screen()
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                music_slider_dragging = False
+            elif event.type == pygame.MOUSEMOTION and menu_state == escape_menu_state and escape_state["status"] == "playing" and escape_state["mouse_look_enabled"]:
+                escape_state["mouse_turn_pending"] += event.rel[0]
+            elif event.type == pygame.MOUSEMOTION and music_slider_dragging and menu_state == "mode":
+                mx, my = event.pos
+                if fullscreen:
+                    scale_x = window_width / desktop_width
+                    scale_y = window_height / desktop_height
+                    mx = int(mx * scale_x)
+                    my = int(my * scale_y)
+                set_home_music_volume_from_slider_y(my)
 
 
 
         if menu_state == "mode":
             draw_surface.fill((0, 0, 0))
             if arona_and_plana_original:
-                scaled = scale_to_fit(arona_and_plana_original, screen_width, screen_height)
+                scaled = pygame.transform.smoothscale(arona_and_plana_original, (screen_width, screen_height))
                 if scaled:
                     draw_surface.blit(scaled, (0, 0))
             # Title/banner on the left
@@ -4482,7 +5596,9 @@ def simulate():
                 pygame.draw.rect(draw_surface, (120, 160, 230), mode_title_rect, 3, border_radius=16)
                 draw_text(draw_surface, "Game Modes", mode_title_rect.x + 22, mode_title_rect.y + 20, size=44)
 
+            draw_vertical_volume_slider(draw_surface, music_slider_rect, home_music_volume_fraction)
             draw_media_toggle_button(draw_surface, music_toggle_rect, home_music_paused)
+            draw_music_skip_button(draw_surface, music_skip_rect)
 
             # Right-side grid buttons
             for idx, mode_name in enumerate(mode_button_names):
@@ -4539,9 +5655,9 @@ def simulate():
             info_titles = ["Mika", "Gojo", "Do Mixi", "Faker", "Epstein", "Elon Musk"]
             info_subtitles = ["Misono Mika", "Gojo Satoru", "Vu A Vu", "T1 Faker", "Network Master", "Technoking"]
             info_previews = [mika_original, gojo_original, vu_original, faker_original, epstein_original, elon_musk_original]
-            info_sizes = [(92, 92), (92, 92), (126, 92), (112, 112), (92, 92)]
-            info_centers = [246, 246, 246, 248, 246]
-            cards_per_page = 5
+            info_sizes = [(92, 92), (92, 92), (126, 92), (112, 112), (92, 92), (92, 92)]
+            info_centers = [246, 246, 246, 248, 246, 246]
+            cards_per_page = 6
             for idx in range(cards_per_page):
                 char_idx = character_info_card_page * cards_per_page + idx
                 if char_idx >= len(info_order):
@@ -4591,6 +5707,10 @@ def simulate():
                     (220, 220, 255),
                     size=20,
                 )
+            if ame_chan_original:
+                ame_size = (180, 180)
+                ame_scaled = pygame.transform.smoothscale(ame_chan_original, ame_size)
+                draw_surface.blit(ame_scaled, (screen_width - ame_size[0], screen_height - ame_size[1]))
         elif menu_state == "zombie_count":
             draw_surface.fill((0, 0, 0))
             title_rect = pygame.Rect(40, 40, screen_width - 80, 100)
@@ -4606,12 +5726,15 @@ def simulate():
             draw_text(draw_surface, zc_text, zombie_count_rect.x + 18, zombie_count_rect.y + 20, color=zc_color, size=28)
         elif menu_state == "zombie_stage_select":
             draw_surface.fill((0, 0, 0))
+            if arona_classroom_dark:
+                scaled = pygame.transform.smoothscale(arona_classroom_dark, (screen_width, screen_height))
+                draw_surface.blit(scaled, (0, 0))
             highest_cleared_wave = get_highest_cleared_zombie_wave()
             highest_unlocked_wave = max(1, highest_cleared_wave + 1)
             page_start_wave = zombie_stage_page * 5 + 1
             page_end_wave = page_start_wave + 4
             header_rect = pygame.Rect(24, 24, screen_width - 48, 108)
-            panel_rect = pygame.Rect(44, 164, screen_width - 88, 360)
+            panel_rect = pygame.Rect(44, 164, screen_width - 538, 250)
             stage_centers = [
                 (160, 295),
                 (320, 230),
@@ -4627,7 +5750,7 @@ def simulate():
             draw_button(draw_surface, zombie_stage_back_rect, "Back", fill_color=(160, 110, 70))
             draw_text(draw_surface, "Mambo Apocalypse Waves", header_rect.x + 20, header_rect.y + 18, size=38)
             draw_text(draw_surface, f"Page {zombie_stage_page + 1}: waves {page_start_wave}-{page_end_wave}", header_rect.x + 20, header_rect.y + 66, (220, 235, 220), size=22)
-            draw_text(draw_surface, f"Cleared through wave {highest_cleared_wave}", panel_rect.x + 22, panel_rect.y + 18, (214, 240, 214), size=22)
+
 
             for idx in range(4):
                 start = stage_centers[idx]
@@ -4678,6 +5801,9 @@ def simulate():
                 draw_text(draw_surface, f"Resume from wave {resume_wave}", zombie_stage_resume_rect.x + 16, zombie_stage_resume_rect.y + 60, (220, 235, 255), size=18)
         elif menu_state == "bot_difficulty":
             draw_surface.fill((0, 0, 0))
+            if arona_classroom_dark:
+                scaled = pygame.transform.smoothscale(arona_classroom_dark, (screen_width, screen_height))
+                draw_surface.blit(scaled, (0, 0))
             title_rect = pygame.Rect(40, 40, screen_width - 80, 100)
             pygame.draw.rect(draw_surface, (40, 45, 70), title_rect, border_radius=16)
             pygame.draw.rect(draw_surface, (120, 160, 230), title_rect, 3, border_radius=16)
@@ -4707,6 +5833,12 @@ def simulate():
             draw_text(draw_surface, "Every 10 extra characters shrinks the ball size by 1.5x.", custom_input_rect.x - 10, custom_input_rect.bottom + 24, (220, 220, 255), size=20)
         elif menu_state == "select":
             draw_surface.fill((0, 0, 0))
+            if arona_classroom_dark:
+                scaled = pygame.transform.smoothscale(arona_classroom_dark, (screen_width, screen_height))
+                draw_surface.blit(scaled, (0, 0))
+            if mika_sky:
+                scaled = pygame.transform.smoothscale(mika_sky, (screen_width, screen_height))
+                draw_surface.blit(scaled, (0, 0))
             display_names = build_display_names(selected_players)
             header_rect = pygame.Rect(50, 20, screen_width - 40, 90)
             shifted_select_back_rect = pygame.Rect(select_back_rect.x + 30, select_back_rect.y, select_back_rect.width, select_back_rect.height)
@@ -4805,6 +5937,13 @@ def simulate():
             draw_text(draw_surface, f"HP Multiplier: {hp_multiplier:.1f}", 50, 400, size=20)
             draw_button(draw_surface, shifted_hp_minus_rect, "-", fill_color=(160, 110, 70))
             draw_button(draw_surface, shifted_hp_plus_rect, "+", fill_color=(70, 130, 220))
+            if ame_chan_original:
+                ame_size = (180, 180)
+                ame_scaled = pygame.transform.smoothscale(ame_chan_original, ame_size)
+                draw_surface.blit(ame_scaled, (screen_width - ame_size[0], screen_height - ame_size[1]))
+        elif menu_state == escape_menu_state:
+            update_escape_mode(real_dt)
+            draw_escape_mode(draw_surface)
         elif menu_state == "play":
             battle_time += sim_dt
             if game_mode == "zombie" and wave_in_progress and not wave_complete:
@@ -5735,6 +6874,15 @@ def simulate():
                                 circle.gojo_domain_freeze_timer = 0.0
                                 circle.gojo_void_intro_timer = 0.0
                                 circle.gojo_domain_banner_timer = 0.0
+                        elif circle.gojo_ultimate_stage == "purple_flight":
+                            circle.gojo_ultimate_timer = max(0.0, circle.gojo_ultimate_timer - sim_dt)
+                            if circle.gojo_ultimate_timer <= 0:
+                                circle.ultimate_active = False
+                                circle.gojo_ultimate_stage = None
+                                circle.gojo_attack_count = 0
+                                circle.gojo_sequence_index = 0
+                                circle.gojo_ultimate_charge_duration = 0.0
+                                circle.bullet_timer = 2.5
                         elif circle.gojo_ultimate_stage == "merge":
                             circle.gojo_ultimate_timer = max(0.0, circle.gojo_ultimate_timer - sim_dt)
                             circle.gojo_ultimate_hold_timer -= sim_dt
@@ -5758,7 +6906,7 @@ def simulate():
                                             size=purple_size,
                                             image=purple_image,
                                             source="gojo_purple",
-                                            damage=300 + skill_bonus,
+                                            damage=700 + skill_bonus,
                                             attack_type="skill",
                                         )
                                         purple_bullet.pushes_projectiles = True
@@ -5767,7 +6915,7 @@ def simulate():
                                         purple_bullet.pull_strength = 40000.0 if current_wave % 5 == 0 else 600000.0
                                         purple_bullet.push_strength = 420000.0
                                         purple_bullet.inner_push_radius = purple_bullet.size * 0.9
-                                        purple_bullet.turn_rate = 0  # Straight line
+                                        purple_bullet.turn_rate = math.pi  # Auto aim like meteor
                                         purple_bullet.target_index = circles.index(circle.target)
                                         bullets.append(purple_bullet)
                                         circle.gojo_ultimate_stage = "purple_flight"
@@ -6005,12 +7153,8 @@ def simulate():
                                 red_speed = (300.0 * 3.0) / 1.3
                                 if circle.gojo_ultimate_stage == "domain":
                                     technique = "blue" if circle.gojo_sequence_index == 0 else "red"
-                                elif circle.gojo_sequence_index == 0:
-                                    technique = "blue"
-                                elif circle.gojo_sequence_index == 1:
-                                    technique = "red"
                                 else:
-                                    technique = random.choice(("red", "blue"))
+                                    technique = "blue" if circle.gojo_sequence_index % 2 == 0 else "red"
 
                                 domain_mul = 2.0 if circle.gojo_ultimate_stage == "domain" else 1.0
                                 skill_bonus = get_apocalypse_damage_bonus(circle, "skill")
@@ -6026,9 +7170,9 @@ def simulate():
                                     speed = red_speed
                                     projectile_image = match_assets["gojo_red_projectile_image"]
                                     source = "gojo_red"
-                                    damage = int(100 * domain_mul) + skill_bonus
-                                    field_strength = 55555.56  # Reduced by another factor of 3
-                                    turn_rate = 0.0
+                                    damage = 300 + skill_bonus
+                                    field_strength = 500000.0  # Scaled for 3x radius
+                                    turn_rate = math.pi  # Auto aim
                                     field_damage_per_second = 0.0
 
                                 aim_unit = get_lead_unit_vector(circle, circle.target, speed)
@@ -6055,7 +7199,7 @@ def simulate():
                                     technique_bullet.hold_timer = 1.0
                                     technique_bullet.hold_duration = 1.0
                                     technique_bullet.hold_offset = circle.radius + technique_bullet.size * 0.9
-                                    technique_bullet.field_radius = (arena_width * 0.5) if source == "gojo_blue" else (technique_bullet.size * 5.0)
+                                    technique_bullet.field_radius = (arena_width * 0.5) if source == "gojo_blue" else (circle.radius * 3.0)
                                     technique_bullet.field_strength = field_strength
                                     if source == "gojo_blue":
                                         technique_bullet.pull_strength = 40000.0
@@ -6080,7 +7224,7 @@ def simulate():
                                         circle.gojo_sequence_index += 1
                                         circle.bullet_timer = 2.5
                                     circle.gojo_attack_count += 1
-                                    if circle.gojo_attack_count >= 2:
+                                    if circle.gojo_attack_count >= 3:
                                         activate_gojo_hollow_purple(circle)
                         elif circle.character_type == "Epstein":
                             circle.bullet_timer -= sim_dt * cooldown_multiplier
@@ -6353,6 +7497,9 @@ def simulate():
                                             side_y = dx / dist
                                             circle.vx = (side_x * 0.72 + dx / dist * 0.28) * move_speed
                                             circle.vy = (side_y * 0.72 + dy / dist * 0.28) * move_speed
+                                    # Update angle to match movement direction
+                                    if abs(circle.vx) > 0 or abs(circle.vy) > 0:
+                                        circle.angle = math.degrees(math.atan2(circle.vy, circle.vx))
                             elif circle.character_type == "Epstein Thrall" and circle.target and circle.target.health > 0:
                                 dx = circle.target.x - circle.x
                                 dy = circle.target.y - circle.y
@@ -6375,18 +7522,44 @@ def simulate():
                                     circle.vx, circle.vy = 0.0, 0.0
                                 else:
                                     move_speed = 280.0 * (0.35 if getattr(circle, "zomboss_slow_timer", 0.0) > 0 else 1.0)
-                                    if circle.character_type == "Epstein":
-                                        move_speed = 300.0 * get_epstein_speed_multiplier(circle) * (0.35 if getattr(circle, "zomboss_slow_timer", 0.0) > 0 else 1.0)
-                                    circle.vx, circle.vy = get_controlled_velocity(keys, pygame.K_w, pygame.K_a, pygame.K_s, pygame.K_d, speed=move_speed)
+                                    if circle.character_type == "Epstein" and game_mode == "zombie":
+                                        move_speed = 300.0 * get_epstein_speed_multiplier(circle)
+                                        vx = 0.0
+                                        vy = 0.0
+                                        if keys[pygame.K_w]:
+                                            vy -= move_speed
+                                        if keys[pygame.K_s]:
+                                            vy += move_speed
+                                        if keys[pygame.K_a]:
+                                            vx -= move_speed
+                                        if keys[pygame.K_d]:
+                                            vx += move_speed
+                                        circle.vx = vx
+                                        circle.vy = vy
+                                    else:
+                                        circle.vx, circle.vy = get_controlled_velocity(keys, pygame.K_w, pygame.K_a, pygame.K_s, pygame.K_d, speed=move_speed)
                             elif circle.controller == "player2":
                                 keys = pygame.key.get_pressed()
-                                if getattr(circle, "zomboss_freeze_timer", 0.0) > 0:
+                                if getattr(circle, "zomboss_slow_timer", 0.0) > 0:
                                     circle.vx, circle.vy = 0.0, 0.0
                                 else:
                                     move_speed = 280.0 * (0.35 if getattr(circle, "zomboss_slow_timer", 0.0) > 0 else 1.0)
-                                    if circle.character_type == "Epstein":
-                                        move_speed = 300.0 * get_epstein_speed_multiplier(circle) * (0.35 if getattr(circle, "zomboss_slow_timer", 0.0) > 0 else 1.0)
-                                    circle.vx, circle.vy = get_controlled_velocity(keys, pygame.K_i, pygame.K_j, pygame.K_k, pygame.K_l, speed=move_speed)
+                                    if circle.character_type == "Epstein" and game_mode == "zombie":
+                                        move_speed = 300.0 * get_epstein_speed_multiplier(circle)
+                                        vx = 0.0
+                                        vy = 0.0
+                                        if keys[pygame.K_i]:
+                                            vy -= move_speed
+                                        if keys[pygame.K_k]:
+                                            vy += move_speed
+                                        if keys[pygame.K_j]:
+                                            vx -= move_speed
+                                        if keys[pygame.K_l]:
+                                            vx += move_speed
+                                        circle.vx = vx
+                                        circle.vy = vy
+                                    else:
+                                        circle.vx, circle.vy = get_controlled_velocity(keys, pygame.K_i, pygame.K_j, pygame.K_k, pygame.K_l, speed=move_speed)
                             elif circle.controller == "zombie" and is_mambo_enemy(circle):
                                 if circle.character_type == "Mambo Zomboss":
                                     circle.x = getattr(circle, "anchor_x", circle.x)
@@ -6433,7 +7606,10 @@ def simulate():
                         
                         if game_mode == "zombie":
                             # Clamp to the full white funnel in local arena coordinates.
-                            circle.clamp_to_trapezoid(0, 0, arena_width, arena_height)
+                            if circle.character_type == "Epstein" and circle.controller in ("player1", "player2"):
+                                circle.clamp_to_arena(arena_width, arena_height)
+                            else:
+                                circle.clamp_to_trapezoid(0, 0, arena_width, arena_height)
                         else:
                             if circle.controller in ("ai", "zombie"):
                                 circle.bounce_off_wall(arena_width, arena_height)
@@ -6580,6 +7756,10 @@ def simulate():
                         continue
                     apply_gojo_infinity_slow(gojo_circle, bullet, ("vx", "vy"), gojo_infinity_radius)
                 bullet.move(sim_dt)
+                if hasattr(bullet, 'elon_mars_timer'):
+                    bullet.elon_mars_timer -= sim_dt
+                    if bullet.elon_mars_timer <= 0:
+                        continue
                 if bullet.source == "gojo_purple":
                     add_gojo_purple_trail(purple_trails, bullet.x, bullet.y, bullet.size)
                 elif bullet.source == "faker_charm":
@@ -6703,6 +7883,8 @@ def simulate():
                         add_gojo_technique_explosion(red_explosions, bullet.x, bullet.y, bullet.size * 2.0, epstein_shadow_colors)
                         if bullet.wall_bounces_remaining <= 0:
                             continue
+                elif bullet.source == "gojo_purple":
+                    pass  # No bounce, continues outside
 
                 touched_wall = (
                     bullet.x - bullet.size <= 0
@@ -6792,23 +7974,7 @@ def simulate():
                     add_faker_magic_flame(faker_magic_flames, bullet.x, bullet.y, max(bullet.size * 1.2, 12.0), (255, 150, 225) if bullet.source == "faker_charm" else (120, 215, 255))
                     continue
                 if bullet.source == "gojo_purple" and touched_wall:
-                    impact_x = min(max(bullet.x, 0), arena_width)
-                    impact_y = min(max(bullet.y, 0), arena_height)
-                    ap_r = max(bullet.field_radius, bullet.size * 2.4)
-                    add_gojo_technique_explosion(red_explosions, impact_x, impact_y, ap_r, gojo_purple_colors)
-                    owner_circle = circles[bullet.owner_index] if 0 <= bullet.owner_index < len(circles) else None
-                    purple_explosion_damage = scale_apocalypse_damage(owner_circle, 200, "skill")
-                    purple_hit_any = False
-                    for idx, circle in enumerate(circles):
-                        if idx == bullet.owner_index or circle.health <= 0:
-                            continue
-                        if not circles_are_hostile(owner_circle, circle):
-                            continue
-                        if math.hypot(circle.x - impact_x, circle.y - impact_y) <= ap_r:
-                            apply_damage_to_circle(damage_texts, circle, purple_explosion_damage, True)
-                            purple_hit_any = True
-                    if purple_hit_any and owner_circle is not None and owner_circle.health > 0:
-                        owner_circle.health = min(owner_circle.max_health, owner_circle.health + owner_circle.max_health * 0.1)
+                    # End ultimate without explosion when hitting wall
                     if 0 <= bullet.owner_index < len(circles):
                         owner = circles[bullet.owner_index]
                         owner.ultimate_active = False
@@ -6840,7 +8006,7 @@ def simulate():
                             continue
                         if bullet.source in ("elon_dogecoin", "elon_rocket_punch", "elon_mars_ultimate") and not circles_are_hostile(owner_circle, circle):
                             continue
-                        hit_radius = circle.radius + (bullet.size * 0.55 if bullet.source == "gojo_purple" else 0.0)
+                        hit_radius = circle.radius + bullet.size
                         # Check for Cybertruck barrier reflection
                         if circle.character_type == "Cybertruck" and getattr(circle, "reflects_projectiles", False):
                             if owner_circle is not None and not circles_are_hostile(owner_circle, circle):
@@ -7649,7 +8815,7 @@ def simulate():
                             ult_text = "ULTIMATE ACTIVE"
                             ult_color = (200, 0, 0)
                     elif circle.character_type == "Gojo Satoru":
-                        purple_text = f"HP {min(circle.gojo_attack_count, 2)}/2"
+                        purple_text = f"HP {min(circle.gojo_attack_count, 3)}/3"
                         gate_wait = max(0.0, 10.0 - battle_time)
                         if gate_wait > 0:
                             ult_text = f"ULT LOCK {gate_wait:.1f}s | {purple_text}"
@@ -7794,7 +8960,7 @@ def simulate():
                             ult_text = "ULT ACTIVE"
                             ult_color = (255, 140, 120)
                     elif circle.character_type == "Gojo Satoru":
-                        purple_text = f"HP {min(circle.gojo_attack_count, 2)}/2"
+                        purple_text = f"HP {min(circle.gojo_attack_count, 3)}/3"
                         gate_wait = max(0.0, 10.0 - battle_time)
                         if gate_wait > 0:
                             ult_text = f"ULT LOCK {gate_wait:.1f}s | {purple_text}"
