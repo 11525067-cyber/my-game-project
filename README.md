@@ -23,4 +23,6 @@ the stage and you can play with 2 players
 
 *You may press Esc in all game mode to pause the game or go back to home screen.
 
+Right-clicking the Epstein in the Game Modes screen will help you enter Escape from Epstein game mode
 
+*Have fun!*
